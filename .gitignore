@@ -1,0 +1,19 @@
+# Build output
+bin/
+obj/
+publish/
+dist/
+
+# IDE / user files
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Speech models are downloaded at runtime, never committed
+*.bin
+*.part
+
+# Test results
+TestResults/

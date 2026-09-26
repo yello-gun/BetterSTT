@@ -1,0 +1,55 @@
+<Page
+    x:Class="BetterTTS.UI.CleanupPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    Title="Cleanup">
+    <StackPanel Margin="24,8,40,32">
+        <Grid Margin="0,0,0,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Margin="0" Style="{StaticResource PageTitle}" Text="Cleanup" />
+            <ui:ToggleSwitch
+                x:Name="MasterSwitch"
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                LabelPosition="Left"
+                OffContent="Cleanup off"
+                OnContent="Cleanup on" />
+        </Grid>
+
+        <Border Padding="24,18" Style="{StaticResource Card}">
+            <StackPanel>
+                <Grid>
+                    <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="Preview" />
+                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                        <Border Width="10" Height="10" Margin="0,0,6,0" VerticalAlignment="Center" Background="{DynamicResource SystemFillColorCriticalBackgroundBrush}" BorderBrush="{DynamicResource SystemFillColorCriticalBrush}" BorderThickness="1" CornerRadius="2" />
+                        <TextBlock Style="{StaticResource Caption}" Text="Removed" />
+                    </StackPanel>
+                </Grid>
+                <TextBlock Margin="0,12,0,6" Style="{StaticResource Caption}" Text="Type something to test your rules" />
+                <ui:TextBox x:Name="SampleBox" Text="Um, so I was thinking... like, maybe we could, uh, you know, try the the new approach?" TextWrapping="Wrap" />
+                <TextBlock x:Name="DiffText" Margin="0,14,0,10" FontSize="15" LineHeight="26" Foreground="{DynamicResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
+                <Border Padding="14,10" Background="{DynamicResource SubtleFillColorSecondaryBrush}" CornerRadius="6">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ui:SymbolIcon VerticalAlignment="Center" FontSize="16" Foreground="{DynamicResource SystemFillColorSuccessBrush}" Symbol="Checkmark24" />
+                        <TextBlock x:Name="ResultText" Grid.Column="1" Margin="10,0" VerticalAlignment="Center" FontSize="15" Foreground="{DynamicResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="SavedText" Grid.Column="2" VerticalAlignment="Center" Style="{StaticResource Caption}" />
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <TextBlock Style="{StaticResource SectionTitle}" Text="Rules" />
+        <StackPanel x:Name="Rules" />
+
+        <ui:Button Margin="0,12,0,0" HorizontalAlignment="Right" Click="OnReset" Content="Reset to defaults" />
+    </StackPanel>
+</Page>
