@@ -1,0 +1,51 @@
+<ui:FluentWindow
+    x:Class="BetterSTT.UI.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:local="clr-namespace:BetterSTT.UI"
+    Title="BetterSTT"
+    Width="1100"
+    Height="780"
+    MinWidth="860"
+    MinHeight="560"
+    ExtendsContentIntoTitleBar="True"
+    WindowBackdropType="Mica"
+    WindowCornerPreference="Round"
+    WindowStartupLocation="CenterScreen"
+    Icon="pack://application:,,,/Assets/BetterSTT.ico">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="BetterSTT">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="pack://application:,,,/Assets/BetterSTT.ico" />
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
+
+        <ui:NavigationView
+            x:Name="Nav"
+            Grid.Row="1"
+            PaneDisplayMode="Left"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleVisible="False"
+            OpenPaneLength="248"
+            FrameMargin="0">
+            <ui:NavigationView.MenuItems>
+                <ui:NavigationViewItem Content="Home" Icon="{ui:SymbolIcon Home24}" TargetPageType="{x:Type local:HomePage}" />
+                <ui:NavigationViewItem Content="Cleanup" Icon="{ui:SymbolIcon Eraser24}" TargetPageType="{x:Type local:CleanupPage}" />
+                <ui:NavigationViewItem Content="Speech" Icon="{ui:SymbolIcon Mic24}" TargetPageType="{x:Type local:SpeechPage}" />
+                <ui:NavigationViewItem Content="General" Icon="{ui:SymbolIcon Settings24}" TargetPageType="{x:Type local:GeneralPage}" />
+            </ui:NavigationView.MenuItems>
+            <ui:NavigationView.PaneFooter>
+                <StackPanel Margin="18,0,12,16" Orientation="Horizontal">
+                    <Ellipse x:Name="StatusDot" Width="8" Height="8" VerticalAlignment="Center" />
+                    <TextBlock x:Name="StatusText" Margin="8,0,0,0" VerticalAlignment="Center" Style="{StaticResource Caption}" />
+                </StackPanel>
+            </ui:NavigationView.PaneFooter>
+        </ui:NavigationView>
+    </Grid>
+</ui:FluentWindow>

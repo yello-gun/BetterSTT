@@ -1,0 +1,61 @@
+<Page
+    x:Class="BetterSTT.UI.SpeechPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    Title="Speech">
+    <StackPanel Margin="24,8,40,32">
+        <TextBlock Style="{StaticResource PageTitle}" Text="Speech" />
+
+        <Border Padding="20,16" Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border x:Name="EngineTile" Style="{StaticResource IconTile}">
+                    <ui:SymbolIcon x:Name="EngineIcon" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20" Symbol="DeveloperBoard24" />
+                </Border>
+                <StackPanel Grid.Column="1" Margin="16,0" VerticalAlignment="Center">
+                    <TextBlock x:Name="EngineTitle" Style="{StaticResource Body}" />
+                    <TextBlock x:Name="EngineDetail" Margin="0,2,0,0" Style="{StaticResource Caption}" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Margin="0,0,16,0" VerticalAlignment="Center" Orientation="Horizontal">
+                    <ui:Button x:Name="RestartButton" Margin="0,0,12,0" Appearance="Primary" Click="OnRestart" Content="Restart to apply" />
+                    <TextBlock VerticalAlignment="Center" Style="{StaticResource Caption}" Text="Use GPU" />
+                </StackPanel>
+                <ui:ToggleSwitch x:Name="GpuSwitch" Grid.Column="3" VerticalAlignment="Center" AutomationProperties.Name="Use GPU" />
+            </Grid>
+        </Border>
+
+        <Grid Margin="0,20,0,8">
+            <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="Model" />
+            <TextBlock HorizontalAlignment="Right" Style="{StaticResource Caption}" Text="Bigger models are more accurate. Models download once, the first time you pick them." />
+        </Grid>
+        <StackPanel x:Name="ModelList" />
+
+        <TextBlock Style="{StaticResource SectionTitle}" Text="Recognition" />
+        <Border Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Body}" Text="Language" />
+                    <TextBlock Margin="0,2,0,0" Style="{StaticResource Caption}" Text="Choose “Detect automatically” if you switch between languages." />
+                </StackPanel>
+                <ComboBox x:Name="LanguageBox" Grid.Column="1" MinWidth="220" AutomationProperties.Name="Language" DisplayMemberPath="Name" />
+            </Grid>
+        </Border>
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource Body}" Text="Words it should know" />
+                <TextBlock Margin="0,2,0,10" Style="{StaticResource Caption}" Text="Names, products and jargon, so they are spelled right. Separate with commas." />
+                <ui:TextBox x:Name="VocabularyBox" AutomationProperties.Name="Words it should know" MinLines="2" PlaceholderText="e.g. Claude, GitHub, Kubernetes" TextWrapping="Wrap" AcceptsReturn="False" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</Page>

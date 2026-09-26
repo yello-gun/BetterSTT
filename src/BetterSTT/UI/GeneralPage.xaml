@@ -1,0 +1,82 @@
+<Page
+    x:Class="BetterSTT.UI.GeneralPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    Title="General">
+    <StackPanel Margin="24,8,40,32">
+        <TextBlock Style="{StaticResource PageTitle}" Text="General" />
+
+        <TextBlock Margin="0,0,0,8" Style="{StaticResource SectionTitle}" Text="Dictation" />
+        <Border Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Body}" Text="Shortcut" />
+                    <TextBlock x:Name="ShortcutHint" Margin="0,2,0,0" Style="{StaticResource Caption}" />
+                </StackPanel>
+                <ContentControl x:Name="ShortcutKeys" Grid.Column="1" Margin="16,0" VerticalAlignment="Center" />
+                <ui:Button x:Name="ChangeButton" Grid.Column="2" MinWidth="90" Click="OnChangeShortcut" Content="Change" />
+            </Grid>
+        </Border>
+
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource Body}" Text="Microphone" />
+                        <TextBlock Margin="0,2,0,0" Style="{StaticResource Caption}" Text="Speak to check the level." />
+                    </StackPanel>
+                    <ComboBox x:Name="MicBox" Grid.Column="1" MinWidth="300" AutomationProperties.Name="Microphone" />
+                </Grid>
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:SymbolIcon VerticalAlignment="Center" FontSize="16" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Symbol="Mic24" />
+                    <Border x:Name="MeterTrack" Grid.Column="1" Height="6" Margin="12,0" VerticalAlignment="Center" Background="{DynamicResource ControlStrokeColorDefaultBrush}" CornerRadius="3">
+                        <Border x:Name="MeterFill" Width="0" HorizontalAlignment="Left" Background="{DynamicResource SystemFillColorSuccessBrush}" CornerRadius="3" />
+                    </Border>
+                    <TextBlock x:Name="MeterLabel" Grid.Column="2" Width="60" VerticalAlignment="Center" Style="{StaticResource Caption}" TextAlignment="Right" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Body}" Text="How text is entered" />
+                    <TextBlock x:Name="OutputHint" Margin="0,2,0,0" Style="{StaticResource Caption}" />
+                </StackPanel>
+                <Border Grid.Column="1" Padding="2" Background="{DynamicResource SubtleFillColorSecondaryBrush}" CornerRadius="6">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:Button x:Name="PasteButton" MinWidth="80" Click="OnPaste" Content="Paste" />
+                        <ui:Button x:Name="TypeButton" MinWidth="80" Margin="2,0,0,0" Click="OnType" Content="Type" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <TextBlock Style="{StaticResource SectionTitle}" Text="Behavior" />
+        <StackPanel x:Name="Toggles" />
+
+        <Grid Margin="0,16,0,0">
+            <TextBlock x:Name="AboutText" VerticalAlignment="Center" Style="{StaticResource Caption}" />
+            <ui:Button HorizontalAlignment="Right" Appearance="Transparent" Click="OnOpenData" Content="Open data folder" />
+        </Grid>
+    </StackPanel>
+</Page>

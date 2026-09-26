@@ -1,7 +1,7 @@
-# Generates assets\BetterTTS.ico (PNG-compressed entries at 16-256 px).
+# Generates assets\BetterSTT.ico (PNG-compressed entries at 16-256 px).
 Add-Type -AssemblyName System.Drawing
 $root = Split-Path $PSScriptRoot -Parent
-$out = Join-Path $root 'assets\BetterTTS.ico'
+$out = Join-Path $root 'assets\BetterSTT.ico'
 New-Item -ItemType Directory -Force (Split-Path $out) | Out-Null
 
 function New-RoundedRect([float]$x, [float]$y, [float]$w, [float]$h, [float]$r) {

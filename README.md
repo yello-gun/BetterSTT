@@ -1,10 +1,10 @@
-# BetterTTS
+# BetterSTT
 
 System-wide dictation for Windows that removes filler words before your text reaches any app. Say it however it comes out; what gets typed is clean.
 
 ![Home screen](docs/screenshots/home-dark.png)
 
-Press **Ctrl + Alt + Space** in any app to start listening, and press it again to stop. The cleaned text is pasted wherever your cursor is. The shortcut works at any time, including while the BetterTTS window is open. If BetterTTS itself has focus, the text is copied to the clipboard instead of pasted.
+Press **Ctrl + Alt + Space** in any app to start listening, and press it again to stop. The cleaned text is pasted wherever your cursor is. The shortcut works at any time, including while the BetterSTT window is open. If BetterSTT itself has focus, the text is copied to the clipboard instead of pasted.
 
 <p>
   <img src="docs/screenshots/overlay-listening-light.png" alt="Listening indicator" height="72">
@@ -33,7 +33,7 @@ Speech recognition runs **on your PC** with [Whisper](https://github.com/openai/
 
 ## Install
 
-Download `BetterTTS-Setup-<version>.exe` from [Releases](../../releases) and run it. No admin rights are needed. The installer isn't code-signed yet, so Windows SmartScreen may ask you to confirm (**More info → Run anyway**).
+Download `BetterSTT-Setup-<version>.exe` from [Releases](../../releases) and run it. No admin rights are needed. The installer isn't code-signed yet, so Windows SmartScreen may ask you to confirm (**More info → Run anyway**).
 
 Installing a newer version upgrades in place and keeps your settings and downloaded models.
 
@@ -48,7 +48,7 @@ powershell -ExecutionPolicy Bypass -File tools\build.ps1
 This runs the tests, publishes a self-contained build to `publish\`, and writes the installer to `dist\`.
 
 ```
-src/BetterTTS/           the app (.NET 8, WPF + WPF-UI Fluent design, lives in the tray)
+src/BetterSTT/           the app (.NET 8, WPF + WPF-UI Fluent design, lives in the tray)
   DictationController.cs the record → transcribe → clean → paste pipeline and settings changes
   TextCleaner.cs         filler-removal rules
   History.cs             last 3 dictations + lifetime stats, and the word diff shown in the UI
@@ -57,7 +57,7 @@ src/BetterTTS/           the app (.NET 8, WPF + WPF-UI Fluent design, lives in t
   Native.cs              global hotkey, paste/typing into other apps, startup registration
   Tray.cs                tray icon, menu and sounds
   UI/                    main window (Home, Cleanup, Speech, General) and the on-screen pill
-tests/BetterTTS.Tests    cleanup-rule and diff unit tests
+tests/BetterSTT.Tests    cleanup-rule and diff unit tests
 installer/               Inno Setup script
 tools/                   build script, icon generator
 docs/screenshots/        images for this README (regenerate with --screenshots)
@@ -71,7 +71,7 @@ docs/screenshots/        images for this README (regenerate with --screenshots)
 
 ## Data
 
-Settings, the last 3 dictations (`history.json`), a log (timings and word counts only, never the dictated text) and downloaded models are stored in `%LOCALAPPDATA%\BetterTTS`. Uninstalling asks whether to delete them.
+Settings, the last 3 dictations (`history.json`), a log (timings and word counts only, never the dictated text) and downloaded models are stored in `%LOCALAPPDATA%\BetterSTT`. Uninstalling asks whether to delete them.
 
 ## License
 
