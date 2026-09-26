@@ -12,6 +12,8 @@
     <ApplicationIcon>..\..\assets\BetterSTT.ico</ApplicationIcon>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <Version>2.2.0</Version>
+    <!-- Keep the product version a plain x.y.z (no "+commit" suffix); code signing checks it. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Product>BetterSTT</Product>
     <Description>System-wide dictation that removes filler words</Description>
   </PropertyGroup>

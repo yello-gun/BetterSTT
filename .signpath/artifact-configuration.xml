@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration for BetterSTT.
+  Paste this into the SignPath project (Artifact Configurations → default) once the project exists.
+
+  The release workflow uploads the installer as a GitHub artifact, which arrives as a ZIP
+  containing BetterSTT-Setup-<version>.exe. SignPath signs that installer after checking that
+  its embedded product name and version match.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="productVersion" default-value="0.0.0" />
+  </parameters>
+  <zip-file>
+    <pe-file path="BetterSTT-Setup-*.exe" product-name="BetterSTT" product-version="${productVersion}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

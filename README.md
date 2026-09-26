@@ -33,7 +33,7 @@ Speech recognition runs **on your PC** with [Whisper](https://github.com/openai/
 
 ## Install
 
-Download `BetterSTT-Setup-<version>.exe` from [Releases](../../releases) and run it. No admin rights are needed. The installer isn't code-signed yet, so Windows SmartScreen may ask you to confirm (**More info → Run anyway**).
+Download `BetterSTT-Setup-<version>.exe` from [Releases](../../releases) and run it. No admin rights are needed. Releases made before code signing was set up aren't signed, so Windows SmartScreen may ask you to confirm them (**More info → Run anyway**). See [Code signing policy](#code-signing-policy).
 
 Installing a newer version upgrades in place and keeps your settings and downloaded models.
 
@@ -45,7 +45,7 @@ Requirements: Windows 10/11 x64, the [.NET 8 SDK](https://dotnet.microsoft.com/d
 powershell -ExecutionPolicy Bypass -File tools\build.ps1
 ```
 
-This runs the tests, publishes a self-contained build to `publish\`, and writes the installer to `dist\`.
+This runs the tests, publishes a self-contained build to `publish\`, and writes the installer to `dist\`. Official releases are built by the [Release workflow](.github/workflows/release.yml) on GitHub, not on a developer's PC.
 
 ```
 src/BetterSTT/           the app (.NET 8, WPF + WPF-UI Fluent design, lives in the tray)
@@ -60,6 +60,8 @@ src/BetterSTT/           the app (.NET 8, WPF + WPF-UI Fluent design, lives in t
 tests/BetterSTT.Tests    cleanup-rule and diff unit tests
 installer/               Inno Setup script
 tools/                   build script, icon generator
+.github/workflows/       release workflow: build on GitHub, sign with SignPath, publish
+.signpath/               SignPath artifact configuration (which file is signed, and its checks)
 docs/screenshots/        images for this README (regenerate with --screenshots)
 ```
 
@@ -69,9 +71,22 @@ docs/screenshots/        images for this README (regenerate with --screenshots)
 - `--transcribe input.wav result.txt` transcribes a 16 kHz mono WAV file and reports the runtime and timing.
 - `--screenshots <folder>` renders every page in light and dark, plus the on-screen pill, to PNG files. It uses sample data.
 
-## Data
+## Privacy
+
+BetterSTT doesn't collect or send any personal data. Audio and text never leave your PC. The only network connection is the one-time speech model download from Hugging Face. Details are in the [privacy policy](PRIVACY.md).
 
 Settings, the last 3 dictations (`history.json`), a log (timings and word counts only, never the dictated text) and downloaded models are stored in `%LOCALAPPDATA%\BetterSTT`. Uninstalling asks whether to delete them.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- **Committers and reviewers:** [yello-gun](https://github.com/yello-gun)
+- **Approvers:** [yello-gun](https://github.com/yello-gun)
+
+Signed installers are built from this repository by the [Release workflow](.github/workflows/release.yml) on GitHub-hosted runners, and every signing request is approved by hand. Contributions from outside the team are reviewed before they're merged. Only BetterSTT's own installer is signed; the third-party open-source libraries it bundles are included as published by their projects.
+
+Signing applies to releases made after the SignPath Foundation approves the project. Earlier installers are unsigned.
 
 ## License
 

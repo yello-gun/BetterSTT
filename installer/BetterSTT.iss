@@ -3,7 +3,10 @@
 ; The AppId is unchanged from the app's earlier names (CleanDictate, BetterTTS), so installing upgrades those versions.
 
 #define AppName "BetterSTT"
-#define AppVersion "2.2.0"
+; The build passes the real version (/DAppVersion=x.y.z) from the project file or the release tag.
+#ifndef AppVersion
+  #define AppVersion "0.0.0"
+#endif
 #define AppExe "BetterSTT.exe"
 
 [Setup]
@@ -11,6 +14,15 @@ AppId={{6C2E3F0A-5B9D-4E7A-9C41-2D8F1B7A3E55}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher=BetterSTT
+AppPublisherURL=https://github.com/yello-gun/BetterSTT
+; Product name and version are embedded in the installer; code signing checks them.
+VersionInfoProductName={#AppName}
+VersionInfoProductVersion={#AppVersion}
+VersionInfoProductTextVersion={#AppVersion}
+VersionInfoVersion={#AppVersion}
+VersionInfoTextVersion={#AppVersion}
+VersionInfoCompany={#AppName}
+VersionInfoDescription={#AppName} Setup
 DefaultDirName={localappdata}\Programs\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes

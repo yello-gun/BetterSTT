@@ -1,0 +1,90 @@
+# Builds the installer on GitHub, has SignPath sign it, and publishes it as a GitHub release.
+#
+# Start it by pushing a version tag (git tag v2.3.0; git push origin v2.3.0) or from the
+# Actions tab with "Run workflow". Signing waits for a manual approval in SignPath.
+#
+# Until SignPath is set up (repository variable SIGNPATH_ORGANIZATION_ID and secret
+# SIGNPATH_API_TOKEN), the workflow only builds and keeps the unsigned installer as a
+# workflow artifact; nothing is published.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build, e.g. 2.3.0 (without the v)'
+        required: true
+
+permissions:
+  contents: write   # create the GitHub release
+  actions: read     # lets SignPath verify the build came from this workflow
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Work out the version
+        id: version
+        shell: pwsh
+        run: |
+          $v = if ('${{ github.event_name }}' -eq 'push') { '${{ github.ref_name }}'.TrimStart('v') } else { '${{ inputs.version }}' }
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "Version '$v' must look like 1.2.3" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Test, publish and build the installer
+        shell: pwsh
+        run: ./tools/build.ps1 -Version ${{ steps.version.outputs.version }}
+
+      - name: Upload the unsigned installer
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: BetterSTT-Setup-${{ steps.version.outputs.version }}-unsigned
+          path: dist/BetterSTT-Setup-${{ steps.version.outputs.version }}.exe
+          if-no-files-found: error
+
+      - name: Sign with SignPath (waits for approval)
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: BetterSTT
+          signing-policy-slug: release-signing
+          github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed
+          parameters: |
+            productVersion: "${{ steps.version.outputs.version }}"
+
+      - name: Publish the signed installer
+        if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $file = "signed/BetterSTT-Setup-$v.exe"
+          if (-not (Test-Path $file)) { throw "Signed installer not found at $file" }
+          $sig = Get-AuthenticodeSignature $file
+          if ($sig.Status -ne 'Valid') { throw "Signature check failed: $($sig.Status)" }
+          Write-Host "Signed by: $($sig.SignerCertificate.Subject)"
+          gh release view "v$v" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "v$v" $file --clobber
+          } else {
+            gh release create "v$v" $file --title "BetterSTT $v" --target '${{ github.sha }}' --generate-notes
+          }
