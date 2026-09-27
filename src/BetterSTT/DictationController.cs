@@ -268,6 +268,7 @@ public sealed class DictationController : IDisposable
         {
             RegisterHotkeys(announceConflict: true);
         }
+        if (before.RecentLimit != Settings.RecentLimit) History.Trim(Settings.RecentLimit);
         if (before.ModelType != Settings.ModelType || before.ModelQuantization != Settings.ModelQuantization)
             _modelTask = LoadModelAsync();
 
@@ -492,7 +493,7 @@ public sealed class DictationController : IDisposable
         var (raw, clean) = result.Value;
         if (clean.Length == 0) return new DictationOutcome(OutcomeKind.Empty);
 
-        var item = History.Add(raw, clean, _target);
+        var item = History.Add(raw, clean, _target, Settings.RecentLimit);
         Log.Write($"Dictation: {LastAudioSeconds:F1} s audio, {LastTranscribeSeconds:F2} s to transcribe, {item.WordsRemoved} words removed");
 
         var kind = await DeliverAsync(settings.AddTrailingSpace ? clean + " " : clean, clean, settings);
@@ -683,7 +684,7 @@ public sealed class DictationController : IDisposable
             }
             else
             {
-                var item = History.Add(result.Value.Raw, result.Value.Clean);
+                var item = History.Add(result.Value.Raw, result.Value.Clean, null, Settings.RecentLimit);
                 TextInjector.SetClipboard(result.Value.Clean);
                 outcome = new DictationOutcome(OutcomeKind.Recovered, item);
             }

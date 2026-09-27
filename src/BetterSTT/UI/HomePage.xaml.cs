@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
@@ -22,6 +22,22 @@ public partial class HomePage : Page
     public HomePage()
     {
         InitializeComponent();
+        foreach (int n in AppSettings.RecentLimits) RecentLimitBox.Items.Add(n == 0 ? "All" : $"Last {n}");
+        RecentLimitBox.SelectionChanged += (_, _) =>
+        {
+            if (_loadingLimit || RecentLimitBox.SelectedIndex < 0) return;
+            int limit = AppSettings.RecentLimits[RecentLimitBox.SelectedIndex];
+            // Keeping fewer deletes the older ones, so ask first when that would remove any.
+            int lost = limit == 0 ? 0 : Math.Max(0, _c.History.Recent.Count - limit);
+            if (lost > 0 && System.Windows.MessageBox.Show(Window.GetWindow(this),
+                    $"Keeping only the last {limit} deletes your {lost} older {(lost == 1 ? "dictation" : "dictations")} from this list. Your totals stay the same.",
+                    "BetterSTT", System.Windows.MessageBoxButton.OKCancel, MessageBoxImage.None) != System.Windows.MessageBoxResult.OK)
+            {
+                RefreshRecent();
+                return;
+            }
+            _c.Update(s => s.RecentLimit = limit);
+        };
         _bars = Theme.AddWaveBars(Wave, 16, Theme.Critical);
         _clock.Tick += (_, _) => ElapsedText.Text = _c.Elapsed.ToString(@"m\:ss");
 
@@ -222,13 +238,35 @@ public partial class HomePage : Page
         TokensValue.Text = "≈ " + _c.History.EstimatedTokensSaved.ToString("N0");
     }
 
+    /// <summary>With a large or unlimited history, Home shows this many until "Show all" is clicked.</summary>
+    const int ShownAtFirst = 15;
+    bool _showAll, _loadingLimit;
+
     void RefreshRecent()
     {
+        int limit = _c.Settings.RecentLimit;
+        _loadingLimit = true;
+        int index = Array.IndexOf(AppSettings.RecentLimits, limit);
+        RecentLimitBox.SelectedIndex = index >= 0 ? index : 0;
+        _loadingLimit = false;
+
         RecentList.Children.Clear();
         var recent = _c.History.Recent;
+        RecentEmpty.Text = limit == 0
+            ? "Your dictations will appear here."
+            : $"Your last {limit} dictations will appear here.";
         RecentEmpty.Visibility = recent.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         ClearButton.Visibility = recent.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-        for (int i = 0; i < recent.Count; i++) RecentList.Children.Add(RecentCard(recent[i], i));
+        int shown = _showAll ? recent.Count : Math.Min(recent.Count, ShownAtFirst);
+        for (int i = 0; i < shown; i++) RecentList.Children.Add(RecentCard(recent[i], i));
+        ShowAllButton.Content = $"Show all {recent.Count} dictations";
+        ShowAllButton.Visibility = shown < recent.Count ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    void OnShowAll(object sender, RoutedEventArgs e)
+    {
+        _showAll = true;
+        RefreshRecent();
     }
 
     Border RecentCard(RecentDictation item, int index)

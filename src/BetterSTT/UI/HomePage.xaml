@@ -1,4 +1,4 @@
-<Page
+﻿<Page
     x:Class="BetterSTT.UI.HomePage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -83,10 +83,15 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="Recent dictations" />
-            <TextBlock Grid.Column="1" Margin="0,0,8,0" VerticalAlignment="Center" Style="{StaticResource Caption}" Text="Last 3 · kept on this PC only" />
+            <StackPanel Grid.Column="1" Margin="0,0,8,0" Orientation="Horizontal">
+                <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Style="{StaticResource Caption}" Text="Keep" />
+                <ComboBox x:Name="RecentLimitBox" MinWidth="110" VerticalAlignment="Center" AutomationProperties.Name="How many recent dictations to keep" />
+                <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Style="{StaticResource Caption}" Text="· kept on this PC only" />
+            </StackPanel>
             <ui:Button x:Name="ClearButton" Grid.Column="2" Appearance="Transparent" Click="OnClear" Content="Clear" />
         </Grid>
         <StackPanel x:Name="RecentList" />
-        <TextBlock x:Name="RecentEmpty" Margin="4,4,0,0" Style="{StaticResource Caption}" Text="Your last three dictations will appear here." />
+        <ui:Button x:Name="ShowAllButton" Margin="0,4,0,0" HorizontalAlignment="Center" Appearance="Transparent" Click="OnShowAll" Visibility="Collapsed" />
+        <TextBlock x:Name="RecentEmpty" Margin="4,4,0,0" Style="{StaticResource Caption}" />
     </StackPanel>
 </Page>

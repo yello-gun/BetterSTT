@@ -302,6 +302,9 @@ public sealed class AppSettings
     /// <summary>Shows a draft of your words in the indicator while you speak.</summary>
     public bool LivePreview { get; set; } = true;
     public bool StartWithWindows { get; set; }
+    /// <summary>How many recent dictations Home keeps; 0 keeps them all.</summary>
+    public int RecentLimit { get; set; } = 3;
+    public static readonly int[] RecentLimits = [3, 5, 10, 15, 0];
     public int MaxRecordingMinutes { get; set; } = 10;
 
     public GgmlType ModelType { get; set; } = GgmlType.LargeV3Turbo;

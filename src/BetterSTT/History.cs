@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace BetterSTT;
@@ -17,7 +17,6 @@ public sealed class RecentDictation
 /// <summary>Lifetime stats plus the last few dictations, stored locally in history.json.</summary>
 public sealed class HistoryStore
 {
-    public const int MaxRecent = 3;
     static string FilePath => Path.Combine(AppPaths.Data, "history.json");
 
     public int Dictations { get; set; }
@@ -64,7 +63,8 @@ public sealed class HistoryStore
         return new HistoryStore();
     }
 
-    public RecentDictation Add(string raw, string clean, AppInfo? app = null)
+    /// <param name="limit">How many recent dictations to keep; 0 keeps them all.</param>
+    public RecentDictation Add(string raw, string clean, AppInfo? app, int limit)
     {
         var item = new RecentDictation
         {
@@ -76,11 +76,24 @@ public sealed class HistoryStore
             WordsRemoved = Math.Max(0, TextCleaner.CountWords(raw) - TextCleaner.CountWords(clean)),
         };
         Recent.Insert(0, item);
-        if (Recent.Count > MaxRecent) Recent.RemoveRange(MaxRecent, Recent.Count - MaxRecent);
+        TrimTo(limit);
         Dictations++;
         WordsRemoved += item.WordsRemoved;
         Save();
         return item;
+    }
+
+    /// <summary>Drops the oldest recent dictations beyond <paramref name="limit"/> (0 = no limit) and saves.</summary>
+    public void Trim(int limit)
+    {
+        if (TrimTo(limit)) Save();
+    }
+
+    bool TrimTo(int limit)
+    {
+        if (limit <= 0 || Recent.Count <= limit) return false;
+        Recent.RemoveRange(limit, Recent.Count - limit);
+        return true;
     }
 
     public void ClearRecent()

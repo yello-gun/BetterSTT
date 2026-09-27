@@ -77,6 +77,7 @@ Per-app rules change settings for one app only. Examples are Exact words in a co
 - BetterSTT keeps listening for a moment after you stop, so your last word isn't cut off.
 - Esc cancels a dictation without typing anything.
 - Each recording is saved to disk while you speak. If the app crashes or transcription fails, the Home page lets you retry it.
+- Home keeps your recent dictations so you can copy them again or fix a word. It keeps the last three by default, and you can choose 5, 10, 15 or all of them.
 - Ctrl + Alt + Shift + V types your last dictation again, which helps when it went into the wrong window.
 - Windows blocks apps from typing into programs that run as administrator. BetterSTT notices this and puts the text on your clipboard so it isn't lost.
 - A small indicator shows while you speak, with a live draft of your words. You can move it to any corner or edge of the screen.
@@ -86,7 +87,7 @@ Per-app rules change settings for one app only. Examples are Exact words in a co
 
 Speech recognition runs on your own PC with [Whisper](https://github.com/openai/whisper) through [Whisper.net](https://github.com/sandrohanea/whisper.net). Your audio and text never leave your computer. BetterSTT connects to the internet for two things only, which are the one-time speech model download from Hugging Face and the daily update check on GitHub. Neither request contains anything about you or what you said, and the update check can be turned off. The [privacy policy](PRIVACY.md) has the details.
 
-Your settings, your last three dictations, a log and your speech models are stored in `%LOCALAPPDATA%\BetterSTT`. The log records timings and outcomes and never records what you said.
+Your settings, your recent dictations, a log and your speech models are stored in `%LOCALAPPDATA%\BetterSTT`. Home keeps the last three dictations by default, and you can change that to 5, 10, 15 or all of them. The log records timings and outcomes and never records what you said.
 
 ![Speech page](docs/screenshots/speech-light.png)
 
@@ -118,7 +119,7 @@ src/BetterSTT/           the app (.NET 8, WPF with the WPF-UI Fluent design, liv
   Native.cs              the global shortcut, typing into other apps and the startup entry
   Updater.cs             update checks, downloads and checksum verification
   Diagnostics.cs         the Save diagnostics file for bug reports
-  History.cs             the last three dictations, lifetime stats and the word diff
+  History.cs             recent dictations, lifetime stats and the word diff
   Tray.cs                the tray icon, its menu and the sounds
   UI/                    the main window pages and the on-screen indicator
 tests/BetterSTT.Tests    unit tests for cleanup, styles, snippets, math and updates
