@@ -56,6 +56,14 @@ public sealed class DictationController : IDisposable
     bool _previewBusy;
     readonly DispatcherTimer _updateTimer;
 
+    // Hands-free: the session is transcribed in pieces at pauses, and typed as a whole at the end.
+    readonly DispatcherTimer _chunkTimer;
+    readonly List<string> _chunks = new();
+    Task _chunkChain = Task.CompletedTask;
+    bool _handsFree, _chunkFailed;
+    int _session;
+    const int MinChunkSeconds = 8, MaxChunkSeconds = 60;
+
     public DictationController(AppSettings settings, HistoryStore? history = null)
     {
         Settings = settings;
@@ -74,8 +82,10 @@ public sealed class DictationController : IDisposable
         _holdTimer.Tick += (_, _) =>
         {
             if (State != DictationState.Recording) { _holdTimer.Stop(); return; }
-            if (!GlobalHotkey.IsKeyDown(Settings.Hotkey.Key)) _ = StopAndTranscribeAsync();
+            if (!_hotkey.IsDown(Settings.Hotkey.Key)) _ = StopAndTranscribeAsync();
         };
+        _chunkTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        _chunkTimer.Tick += (_, _) => CutChunkAtPause();
         _previewTimer = new DispatcherTimer();
         _previewTimer.Tick += (_, _) => _ = UpdatePreviewAsync();
         _idleTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
@@ -124,7 +134,7 @@ public sealed class DictationController : IDisposable
 
     public string StatusText => State switch
     {
-        DictationState.Recording => "Listening",
+        DictationState.Recording => _handsFree ? "Listening (hands-free)" : "Listening",
         DictationState.Transcribing => "Transcribing",
         _ => ModelState switch
         {
@@ -237,6 +247,8 @@ public sealed class DictationController : IDisposable
             return $"{binding} is already your {(target == HotkeyTarget.Dictate ? "paste-last" : "dictation")} shortcut.";
         if (binding.Key == WinFormsKeys.Escape && !binding.Ctrl && !binding.Alt && !binding.Shift && !binding.Win)
             return "Esc is reserved for cancelling a dictation.";
+        if (binding.Key == WinFormsKeys.MButton && !binding.Ctrl && !binding.Alt && !binding.Shift && !binding.Win)
+            return "Middle click on its own is used everywhere. Hold Ctrl, Alt, Shift or Win with it, or use a side button.";
         if (!_hotkey.IsAvailable(binding))
             return $"{binding} is already used by another app. Try another combination.";
 
@@ -397,11 +409,18 @@ public sealed class DictationController : IDisposable
         }
 
         _recordingStarted = DateTime.Now;
+        _handsFree = Settings.Activation == ActivationMode.HandsFree;
+        _session++;
+        _chunks.Clear();
+        _chunkFailed = false;
+        _chunkChain = Task.CompletedTask;
+        if (_handsFree) _chunkTimer.Start();
         State = DictationState.Recording;
         Sounds.Start();
         WakeModel(); // a sleeping model reloads while you talk
         _hotkey.Register(CancelHotkeyId, EscapeKey); // Esc cancels, only while listening
-        _maxLengthTimer.Interval = TimeSpan.FromMinutes(Math.Max(1, Settings.MaxRecordingMinutes));
+        // Hands-free sessions can run long; they're transcribed as they go, so only a generous safety limit applies.
+        _maxLengthTimer.Interval = TimeSpan.FromMinutes(_handsFree ? 120 : Math.Max(1, Settings.MaxRecordingMinutes));
         _maxLengthTimer.Start();
         PreviewText = "";
         if (ActiveSettings.LivePreview)
@@ -422,6 +441,8 @@ public sealed class DictationController : IDisposable
         StateChanged?.Invoke();
 
         await _recorder.StopAsync();
+        _session++; // pieces still being transcribed are thrown away
+        _chunks.Clear();
         PendingAudio.Delete(_spoolPath);
         _spoolPath = null;
         Sounds.Stop();
@@ -442,6 +463,7 @@ public sealed class DictationController : IDisposable
     {
         _maxLengthTimer.Stop();
         _holdTimer.Stop();
+        _chunkTimer.Stop();
         StopPreview();
         _hotkey.Unregister(CancelHotkeyId);
     }
@@ -488,9 +510,24 @@ public sealed class DictationController : IDisposable
     async Task<DictationOutcome> TranscribeAndDeliverAsync(float[] samples)
     {
         var settings = ActiveSettings;
-        var result = await TranscribeAsync(samples, settings);
-        if (result == null) return new DictationOutcome(OutcomeKind.NoSpeech);
-        var (raw, clean) = result.Value;
+        string? raw;
+        if (_handsFree)
+        {
+            // Wait for the pieces already sent off, then add the last one and treat it all as one dictation,
+            // so styles, paragraphs and corrections see the whole thing.
+            await _chunkChain;
+            if (_chunkFailed) throw new InvalidOperationException("Part of the hands-free recording couldn't be transcribed.");
+            string? last = await TranscribeRawAsync(samples, settings);
+            var parts = _chunks.Append(last).Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim()).ToList();
+            raw = parts.Count == 0 ? null : string.Join(" ", parts);
+            LastAudioSeconds = (DateTime.Now - _recordingStarted).TotalSeconds;
+        }
+        else
+        {
+            raw = await TranscribeRawAsync(samples, settings);
+        }
+        if (raw == null) return new DictationOutcome(OutcomeKind.NoSpeech);
+        string clean = TextCleaner.Process(raw, settings);
         if (clean.Length == 0) return new DictationOutcome(OutcomeKind.Empty);
 
         var item = History.Add(raw, clean, _target, Settings.RecentLimit);
@@ -503,8 +540,16 @@ public sealed class DictationController : IDisposable
     /// <returns>Null when there was no speech in the recording.</returns>
     async Task<(string Raw, string Clean)?> TranscribeAsync(float[] samples, AppSettings settings)
     {
+        string? raw = await TranscribeRawAsync(samples, settings);
+        return raw == null ? null : (raw, TextCleaner.Process(raw, settings));
+    }
+
+    /// <returns>What the model heard, or null when there was no speech (including phrases it made up from noise).</returns>
+    async Task<string?> TranscribeRawAsync(float[] samples, AppSettings settings)
+    {
         var audio = AudioPrep.Prepare(samples);
         if (audio == null) return null;
+        double loudSeconds = AudioPrep.LoudSeconds(samples);
 
         await EnsureModelReadyAsync();
 
@@ -513,7 +558,56 @@ public sealed class DictationController : IDisposable
         LastTranscribeSeconds = timer.Elapsed.TotalSeconds;
         LastAudioSeconds = audio.Length / (double)AudioRecorder.SampleRate;
         _lastUsed = DateTime.Now;
-        return (raw, TextCleaner.Process(raw, settings));
+        if (TextCleaner.IsLikelyPhantom(raw, loudSeconds))
+        {
+            Log.Write($"Ignored a phrase the speech model made up from background noise ({loudSeconds:F2} s of clear speech)");
+            return null;
+        }
+        return raw;
+    }
+
+    // ---- hands-free ----
+
+    /// <summary>
+    /// While a hands-free session runs, sends each stretch of speech off to be transcribed once there's a
+    /// pause, so a long session finishes almost as soon as it's turned off.
+    /// </summary>
+    void CutChunkAtPause()
+    {
+        if (!_handsFree || State != DictationState.Recording) return;
+        int count = _recorder.Count;
+        if (count < MinChunkSeconds * AudioRecorder.SampleRate) return;
+        bool pause = _recorder.TailRms(0.7) < 0.008f;
+        if (!pause && count < MaxChunkSeconds * AudioRecorder.SampleRate) return;
+
+        var samples = _recorder.Take(count);
+        Log.Write($"Hands-free: sent {count / (double)AudioRecorder.SampleRate:F1} s of speech off to be transcribed");
+        var settings = ActiveSettings;
+        int session = _session;
+        var previous = _chunkChain;
+        _chunkChain = TranscribeChunkAsync(previous, samples, settings, session);
+    }
+
+    async Task TranscribeChunkAsync(Task previous, float[] samples, AppSettings settings, int session)
+    {
+        await previous; // pieces are added in the order they were spoken
+        try
+        {
+            string? raw = await TranscribeRawAsync(samples, settings);
+            if (session != _session || raw == null) return;
+            _chunks.Add(raw);
+            if (ActiveSettings.LivePreview && State == DictationState.Recording)
+            {
+                PreviewText = TextCleaner.Process(string.Join(" ", _chunks), settings).Replace("\n", " ");
+                PreviewChanged?.Invoke();
+            }
+        }
+        catch (Exception ex)
+        {
+            // The whole session is still on disk, so a retry from Home can recover it.
+            Log.Write($"Hands-free piece failed: {ex.Message}");
+            if (session == _session) _chunkFailed = true;
+        }
     }
 
     /// <summary>Types or pastes the text, falling back to the clipboard where typing can't reach.</summary>
@@ -563,8 +657,9 @@ public sealed class DictationController : IDisposable
         {
             string raw = await Task.Run(() => _transcriber.TranscribeAsync(audio, settings, ct), ct);
             if (ct.IsCancellationRequested || State != DictationState.Recording) return;
-            PreviewText = TextCleaner.Process(raw, settings)
-                .Replace("\n\n", " ");
+            // In hands-free, the draft is what's been transcribed so far plus the words since the last pause.
+            string sofar = _handsFree ? string.Join(" ", _chunks) + " " : "";
+            PreviewText = TextCleaner.Process(sofar + raw, settings).Replace("\n", " ");
             PreviewChanged?.Invoke();
             // Refresh about twice as often as a preview takes, within 0.8–4 s.
             _previewTimer.Interval = TimeSpan.FromMilliseconds(Math.Clamp(timer.ElapsedMilliseconds * 2, 800, 4000));

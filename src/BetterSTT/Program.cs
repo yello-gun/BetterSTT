@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using NAudio.Wave;
 using Whisper.net.LibraryLoader;
 
@@ -25,6 +25,8 @@ static class Program
         bool background = args.Contains("--background");
         bool testRun = args.Contains("--no-paste");
         TextInjector.ClipboardOnly = testRun;
+        int testAudio = Array.IndexOf(args, "--test-audio");
+        if (testRun && testAudio >= 0 && testAudio + 1 < args.Length) AudioRecorder.TestInput = args[testAudio + 1];
         // --toggle, --paste-last, --cancel: control the running copy from a launcher, Stream Deck or script.
         string? command = args.Select(a => a.TrimStart('-').ToLowerInvariant()).FirstOrDefault(Signals.Commands.Contains);
 

@@ -38,6 +38,7 @@
                     <StackPanel Orientation="Horizontal">
                         <ui:Button x:Name="ToggleModeButton" MinWidth="110" Click="OnToggleMode" Content="Press to start" />
                         <ui:Button x:Name="HoldModeButton" MinWidth="110" Margin="2,0,0,0" Click="OnHoldMode" Content="Hold to talk" />
+                        <ui:Button x:Name="HandsFreeModeButton" MinWidth="110" Margin="2,0,0,0" Click="OnHandsFreeMode" Content="Hands-free" />
                     </StackPanel>
                 </Border>
             </Grid>

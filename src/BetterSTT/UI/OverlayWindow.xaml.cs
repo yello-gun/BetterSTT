@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -191,7 +191,7 @@ public partial class OverlayWindow : Window
         DetailText.Visibility = Visibility.Visible;
         Keys.Children.Clear();
         foreach (var part in _c.Settings.Hotkey.Parts()) Keys.Children.Add(Keycap(part));
-        StopText.Text = _c.Settings.Activation == ActivationMode.Hold ? "release to stop" : "to stop";
+        StopText.Text = _c.Settings.Activation switch { ActivationMode.Hold => "release to stop", ActivationMode.HandsFree => "to finish", _ => "to stop" };
         StopHint.Visibility = Visibility.Visible;
         _clock.Start();
         ShowAtBottom();

@@ -1,4 +1,4 @@
-using NAudio.Wave;
+﻿using NAudio.Wave;
 
 namespace BetterSTT;
 
@@ -17,7 +17,37 @@ public sealed class AudioRecorder : IDisposable
     /// <summary>Peak level of the latest buffer, 0..1. Raised on a background thread.</summary>
     public event Action<float>? LevelChanged;
 
-    public bool IsRecording => _wave != null;
+    public bool IsRecording => _wave != null || _testFeed != null;
+
+    /// <summary>
+    /// Automated tests only (--no-paste --test-audio file.wav): plays a 16 kHz mono WAV in real time instead
+    /// of the microphone, followed by silence, so recordings are repeatable.
+    /// </summary>
+    public static string? TestInput { get; set; }
+    CancellationTokenSource? _testFeed;
+
+    void StartTestFeed(string path)
+    {
+        var cts = _testFeed = new CancellationTokenSource();
+        var audio = PendingAudio.Read(path);
+        _ = Task.Run(async () =>
+        {
+            const int chunk = SampleRate / 20; // 50 ms, like the microphone
+            var buffer = new byte[chunk * 2];
+            for (int pos = 0; !cts.IsCancellationRequested; pos += chunk)
+            {
+                for (int i = 0; i < chunk; i++)
+                {
+                    float v = pos + i < audio.Length ? audio[pos + i] : 0f;
+                    short s = (short)Math.Clamp(v * 32768f, short.MinValue, short.MaxValue);
+                    buffer[i * 2] = (byte)s;
+                    buffer[i * 2 + 1] = (byte)(s >> 8);
+                }
+                OnData(this, new WaveInEventArgs(buffer, buffer.Length));
+                try { await Task.Delay(50, cts.Token); } catch (OperationCanceledException) { break; }
+            }
+        });
+    }
 
     public static IReadOnlyList<string> GetDevices() =>
         Enumerable.Range(0, WaveInEvent.DeviceCount).Select(i => WaveInEvent.GetCapabilities(i).ProductName).ToList();
@@ -27,7 +57,7 @@ public sealed class AudioRecorder : IDisposable
     /// </param>
     public void Start(int deviceNumber, string? spoolPath = null)
     {
-        if (_wave != null) return;
+        if (_wave != null || _testFeed != null) return;
         lock (_gate)
         {
             _samples.Clear();
@@ -47,6 +77,11 @@ public sealed class AudioRecorder : IDisposable
             }
         }
 
+        if (TestInput != null)
+        {
+            StartTestFeed(TestInput);
+            return;
+        }
         if (deviceNumber >= WaveInEvent.DeviceCount) deviceNumber = -1;
         var wave = new WaveInEvent
         {
@@ -71,8 +106,54 @@ public sealed class AudioRecorder : IDisposable
         }
     }
 
+    /// <summary>Samples held in memory (everything since the start, or since the last <see cref="Take"/>).</summary>
+    public int Count
+    {
+        get { lock (_gate) return _samples.Count; }
+    }
+
+    /// <summary>
+    /// Removes and returns the oldest <paramref name="count"/> samples while recording carries on (hands-free
+    /// mode transcribes a long session piece by piece). The copy on disk keeps everything.
+    /// </summary>
+    public float[] Take(int count)
+    {
+        lock (_gate)
+        {
+            count = Math.Min(count, _samples.Count);
+            var taken = _samples.GetRange(0, count).ToArray();
+            _samples.RemoveRange(0, count);
+            return taken;
+        }
+    }
+
+    /// <summary>Loudness (RMS) of the last <paramref name="seconds"/> of audio.</summary>
+    public float TailRms(double seconds)
+    {
+        lock (_gate)
+        {
+            int n = Math.Min(_samples.Count, (int)(seconds * SampleRate));
+            if (n == 0) return 0;
+            double sum = 0;
+            for (int i = _samples.Count - n; i < _samples.Count; i++) sum += _samples[i] * _samples[i];
+            return (float)Math.Sqrt(sum / n);
+        }
+    }
+
     public async Task<float[]> StopAsync()
     {
+        if (_testFeed != null)
+        {
+            _testFeed.Cancel();
+            _testFeed = null;
+            await Task.Delay(100);
+            lock (_gate)
+            {
+                _spool?.Dispose();
+                _spool = null;
+                return _samples.ToArray();
+            }
+        }
         var wave = _wave;
         if (wave == null) return [];
         _wave = null;
@@ -243,6 +324,20 @@ public static class AudioPrep
     const int FrameSize = AudioRecorder.SampleRate / 50; // 20 ms
     const float SpeechRms = 0.012f;                      // ~ -38 dBFS
     const int PadSamples = AudioRecorder.SampleRate * 3 / 10;
+
+    /// <summary>How many seconds of the audio are clearly spoken (louder than background noise), before any gain.</summary>
+    public static double LoudSeconds(float[] samples)
+    {
+        const float loud = 0.02f; // ~ -34 dBFS: a voice close to the microphone, not a room in the background
+        int frames = samples.Length / FrameSize, count = 0;
+        for (int f = 0; f < frames; f++)
+        {
+            double sum = 0;
+            for (int i = f * FrameSize; i < (f + 1) * FrameSize; i++) sum += samples[i] * samples[i];
+            if (Math.Sqrt(sum / FrameSize) >= loud) count++;
+        }
+        return count * FrameSize / (double)AudioRecorder.SampleRate;
+    }
 
     /// <summary>
     /// Trims silence, normalizes quiet input and pads to Whisper's 1 s minimum.

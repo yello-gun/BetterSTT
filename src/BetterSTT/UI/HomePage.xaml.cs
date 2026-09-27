@@ -140,6 +140,7 @@ public partial class HomePage : Page
         bool recording = _c.State == DictationState.Recording;
         bool ready = _c.ModelState is ModelState.Ready or ModelState.Sleeping;
         bool hold = _c.Settings.Activation == ActivationMode.Hold;
+        bool handsFree = _c.Settings.Activation == ActivationMode.HandsFree;
         string colorKey = _c.State == DictationState.Idle && ready
             ? Theme.Accent
             : Theme.StatusKey(_c);
@@ -155,13 +156,17 @@ public partial class HomePage : Page
         {
             DictationState.Recording => hold
                 ? ("Listening…", "Release", "to stop and paste. Esc cancels.")
-                : ("Listening…", "Press", "again to stop and paste. Esc cancels."),
+                : handsFree
+                    ? ("Listening hands-free…", "Press", "again to type everything you said. Esc cancels.")
+                    : ("Listening…", "Press", "again to stop and paste. Esc cancels."),
             DictationState.Transcribing => ("Transcribing…", "Your text will appear where your cursor is.", ""),
             _ => _c.ModelState switch
             {
                 ModelState.Ready or ModelState.Sleeping => hold
                     ? ("Ready to dictate", "Hold", "in any app and speak. Let go to paste.")
-                    : ("Ready to dictate", "Press", "in any app. Press it again to stop and paste."),
+                    : handsFree
+                        ? ("Ready to dictate", "Press", "in any app to start hands-free. Press it again when you're done.")
+                        : ("Ready to dictate", "Press", "in any app. Press it again to stop and paste."),
                 ModelState.Downloading => ($"Downloading speech model… {_c.DownloadedMb} MB",
                     "One-time download. You can already start: press", "and your text is typed once it finishes."),
                 ModelState.Failed => ("The speech model didn't load", _c.ModelError ?? "Check the Speech page.", ""),

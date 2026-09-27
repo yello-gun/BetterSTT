@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using WinForms = System.Windows.Forms;
 
@@ -12,6 +12,16 @@ public sealed class GlobalHotkey : IDisposable
 
     readonly HwndSource _window;
     readonly HashSet<int> _registered = new();
+    readonly System.Windows.Threading.Dispatcher _dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+
+    // Mouse buttons can't be registered as hotkeys, so a low-level mouse hook watches for them instead.
+    readonly Dictionary<int, HotkeyBinding> _mouse = new();
+    readonly HashSet<WinForms.Keys> _mouseDown = new(), _swallowUp = new();
+    IntPtr _hook;
+    LowLevelMouseProc? _hookProc; // kept in a field so the delegate isn't garbage collected
+
+    public static bool IsMouseButton(WinForms.Keys key) =>
+        key is WinForms.Keys.XButton1 or WinForms.Keys.XButton2 or WinForms.Keys.MButton;
 
     /// <summary>Raised with the id of the hotkey that was pressed.</summary>
     public event Action<int>? Pressed;
@@ -29,6 +39,16 @@ public sealed class GlobalHotkey : IDisposable
     public bool Register(int id, HotkeyBinding b)
     {
         Unregister(id);
+        if (IsMouseButton(b.Key))
+        {
+            _mouse[id] = b;
+            if (_hook == IntPtr.Zero)
+            {
+                _hookProc = MouseHook;
+                _hook = SetWindowsHookEx(WH_MOUSE_LL, _hookProc, GetModuleHandle(null), 0);
+            }
+            return _hook != IntPtr.Zero;
+        }
         uint mods = MOD_NOREPEAT;
         if (b.Ctrl) mods |= MOD_CONTROL;
         if (b.Alt) mods |= MOD_ALT;
@@ -42,12 +62,63 @@ public sealed class GlobalHotkey : IDisposable
     public void Unregister(int id)
     {
         if (_registered.Remove(id)) UnregisterHotKey(_window.Handle, id);
+        if (_mouse.Remove(id) && _mouse.Count == 0 && _hook != IntPtr.Zero)
+        {
+            UnhookWindowsHookEx(_hook);
+            _hook = IntPtr.Zero;
+            _mouseDown.Clear();
+        }
     }
 
     public void UnregisterAll()
     {
-        foreach (int id in _registered.ToList()) Unregister(id);
+        foreach (int id in _registered.Concat(_mouse.Keys).ToList()) Unregister(id);
     }
+
+    /// <summary>
+    /// Watches the side and middle mouse buttons. A bound click is kept from the app under the mouse
+    /// (otherwise the back button would also go back a page), and reported as the hotkey.
+    /// </summary>
+    IntPtr MouseHook(int code, IntPtr wParam, IntPtr lParam)
+    {
+        if (code >= 0)
+        {
+            int msg = wParam.ToInt32();
+            WinForms.Keys? button = msg switch
+            {
+                WM_XBUTTONDOWN or WM_XBUTTONUP => (Marshal.ReadInt32(lParam, 8) >> 16) == 1 ? WinForms.Keys.XButton1 : WinForms.Keys.XButton2,
+                WM_MBUTTONDOWN or WM_MBUTTONUP => WinForms.Keys.MButton,
+                _ => null,
+            };
+            if (button is { } b)
+            {
+                if (msg is WM_XBUTTONDOWN or WM_MBUTTONDOWN)
+                {
+                    foreach (var (id, binding) in _mouse)
+                    {
+                        if (binding.Key != b || !ModifiersMatch(binding)) continue;
+                        _mouseDown.Add(b);
+                        _swallowUp.Add(b);
+                        _dispatcher.BeginInvoke(() => Pressed?.Invoke(id));
+                        return 1;
+                    }
+                }
+                else
+                {
+                    _mouseDown.Remove(b);
+                    if (_swallowUp.Remove(b)) return 1;
+                }
+            }
+        }
+        return CallNextHookEx(_hook, code, wParam, lParam);
+    }
+
+    static bool ModifiersMatch(HotkeyBinding b) =>
+        IsKeyDown(WinForms.Keys.ControlKey) == b.Ctrl && IsKeyDown(WinForms.Keys.Menu) == b.Alt
+        && IsKeyDown(WinForms.Keys.ShiftKey) == b.Shift && (IsKeyDown(WinForms.Keys.LWin) || IsKeyDown(WinForms.Keys.RWin)) == b.Win;
+
+    /// <summary>True while the key or mouse button is held down (used for hold-to-talk).</summary>
+    public bool IsDown(WinForms.Keys key) => IsMouseButton(key) ? _mouseDown.Contains(key) : IsKeyDown(key);
 
     /// <summary>Whether a combination is free, without keeping it registered.</summary>
     public bool IsAvailable(HotkeyBinding b)
@@ -79,6 +150,21 @@ public sealed class GlobalHotkey : IDisposable
 
     [DllImport("user32.dll")]
     static extern short GetAsyncKeyState(int vKey);
+
+    const int WH_MOUSE_LL = 14, WM_MBUTTONDOWN = 0x0207, WM_MBUTTONUP = 0x0208, WM_XBUTTONDOWN = 0x020B, WM_XBUTTONUP = 0x020C;
+    delegate IntPtr LowLevelMouseProc(int code, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc proc, IntPtr hMod, uint threadId);
+
+    [DllImport("user32.dll")]
+    static extern bool UnhookWindowsHookEx(IntPtr hook);
+
+    [DllImport("user32.dll")]
+    static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    static extern IntPtr GetModuleHandle(string? name);
 
     [DllImport("user32.dll", SetLastError = true)]
     static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -318,6 +404,21 @@ public static class TextInjector
 
     [DllImport("user32.dll")]
     static extern short GetAsyncKeyState(int vKey);
+
+    const int WH_MOUSE_LL = 14, WM_MBUTTONDOWN = 0x0207, WM_MBUTTONUP = 0x0208, WM_XBUTTONDOWN = 0x020B, WM_XBUTTONUP = 0x020C;
+    delegate IntPtr LowLevelMouseProc(int code, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc proc, IntPtr hMod, uint threadId);
+
+    [DllImport("user32.dll")]
+    static extern bool UnhookWindowsHookEx(IntPtr hook);
+
+    [DllImport("user32.dll")]
+    static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    static extern IntPtr GetModuleHandle(string? name);
 
     [DllImport("user32.dll")]
     static extern IntPtr GetForegroundWindow();

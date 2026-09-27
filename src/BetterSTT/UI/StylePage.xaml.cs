@@ -38,6 +38,9 @@ public partial class StylePage : Page
         new("I-I", "Stutters and restarts",
             "Repeated words and phrases (“I think I think”, “the the”) and cut-off words (“we were go- going”).",
             o => o.RemoveStutters, (o, v) => o.RemoveStutters = v, "Keep repeats of", o => o.StutterExceptions),
+        new("↩", "Mid-sentence corrections",
+            "When you correct yourself, only the correction is kept: “Tuesday, no wait, Wednesday” → “Wednesday”, “Buy milk. Scratch that. Buy eggs.” → “Buy eggs.” What gets replaced is worked out from what you said before and after, and “sorry” or “I mean” are left alone when they aren't a correction.",
+            o => o.FixCorrections, (o, v) => o.FixCorrections = v),
         new("[ ]", "Non-speech tags", "Removes [BLANK_AUDIO], (music) and similar notes the model adds.",
             o => o.RemoveNonSpeechTags, (o, v) => o.RemoveNonSpeechTags = v),
     ];
@@ -128,6 +131,8 @@ public partial class StylePage : Page
                 GreetingAndSignOffLines = source.GreetingAndSignOffLines,
                 ParagraphStarters = source.ParagraphStarters.ToList(),
                 SpokenMath = source.SpokenMath,
+                SpokenLayout = source.SpokenLayout,
+                SpokenPunctuation = source.SpokenPunctuation,
             });
             s.Style = name;
         });
@@ -226,6 +231,14 @@ public partial class StylePage : Page
         Editor.Children.Add(Option("Automatic paragraphs",
             "Starts a new paragraph, with a blank line before it, when you change topic (“Also…”, “Next…”), after a greeting, before a sign-off, and when a paragraph gets long.",
             style.AutoParagraphs, on => EditStyle(s => s.AutoParagraphs = on), paragraphDetails));
+
+        // Spoken commands
+        Editor.Children.Add(Option("Spoken new lines",
+            "Say “new line” or “new paragraph” as its own phrase to start one. “Add a new line to the file” is left as words.",
+            style.SpokenLayout, on => EditStyle(s => s.SpokenLayout = on), new StackPanel()));
+        Editor.Children.Add(Option("Spoken punctuation",
+            "Say “comma”, “period”, “question mark”, “exclamation point”, “colon”, “semicolon”, “open quote” and “close quote” to type them. Useful if you like to control punctuation yourself.",
+            style.SpokenPunctuation, on => EditStyle(s => s.SpokenPunctuation = on), new StackPanel()));
 
         // Spoken math
         var mathDetails = new StackPanel { Orientation = Orientation.Horizontal };

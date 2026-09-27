@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 namespace BetterSTT;
 
@@ -42,6 +42,7 @@ public static class TextCleaner
         if (!o.Enabled) return s;
 
         if (o.RemoveNonSpeechTags) s = NonSpeechTags.Replace(s, " ");
+        if (o.FixCorrections) s = SelfCorrections.Apply(Regex.Replace(s, @"\s+", " ").Trim());
         if (o.RemoveEllipses) s = Ellipsis.Replace(s, $" {Pause} ");
 
         var discourse = o.RemoveDiscourseMarkers ? BuildWordRegex(o.DiscourseMarkers, elongate: false) : null;
@@ -78,8 +79,71 @@ public static class TextCleaner
         if (style.RemoveVagueEndings) s = RemoveVagueEndings(s, style.VagueEndings);
         s = ApplyReplacements(s, replacements);
         s = SpokenMath.Convert(s, style.SpokenMath);
-        if (style.AutoParagraphs) s = FormatParagraphs(s, style);
-        return s;
+        if (style.SpokenPunctuation) s = ApplySpokenPunctuation(s);
+
+        // Spoken "new line" / "new paragraph" split the text into blocks; automatic paragraphs work within each.
+        var blocks = style.SpokenLayout ? SplitSpokenLayout(s) : [(s, "")];
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < blocks.Count; i++)
+        {
+            var (block, separator) = blocks[i];
+            string b = block.Trim();
+            // A block after a spoken break starts a new sentence.
+            if (i > 0 && b.Length > 0 && char.IsLower(b[0])) b = char.ToUpperInvariant(b[0]) + b[1..];
+            if (style.AutoParagraphs) b = FormatParagraphs(b, style);
+            sb.Append(b).Append(separator);
+        }
+        return sb.ToString().Trim(' ', '\n');
+    }
+
+    static readonly Regex SpokenLayoutCommand = new(
+        @"(?<pre>^|[.!?,;:])\s*\bnew\s+(?<k>line|paragraph)\b(?:\s*[.,!?;:]|\s*$|(?=\s+(?-i:\p{Lu})))\s*",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Splits text at spoken "new line" / "new paragraph" commands (only when said as their own phrase,
+    /// so "add a new line to the file" is left alone). Each block comes with the break that follows it.
+    /// </summary>
+    public static List<(string Text, string Separator)> SplitSpokenLayout(string text)
+    {
+        var blocks = new List<(string, string)>();
+        int last = 0;
+        foreach (Match m in SpokenLayoutCommand.Matches(text))
+        {
+            string block = text[last..m.Index];
+            string pre = m.Groups["pre"].Value;
+            // A comma before the break ends the paragraph, except after a greeting ("Hi Sarah,").
+            if (pre == ",") pre = Greeting.IsMatch(block.Trim() + ",") ? "," : ".";
+            if (block.Trim().Length > 0) block = block.TrimEnd() + pre;
+            string separator = m.Groups["k"].Value.Equals("line", StringComparison.OrdinalIgnoreCase) ? "\n" : "\n\n";
+            if (block.Trim().Length > 0) blocks.Add((block, separator));
+            last = m.Index + m.Length;
+        }
+        blocks.Add((text[last..], ""));
+        return blocks;
+    }
+
+    static readonly (Regex Pattern, string Mark)[] SpokenMarks =
+    [
+        (new(@"[\s,]*\b(?:question\s+mark)\b[.,?]?", Opts), "?"),
+        (new(@"[\s,]*\b(?:exclamation\s+(?:mark|point))\b[.,!]?", Opts), "!"),
+        (new(@"[\s,]*\b(?:full\s+stop|period)\b[.,]?(?=\s*$|\s*[\p{P}]|\s+(?-i:\p{Lu})|\s+new\b)", Opts), "."),
+        (new(@"[\s,]*\bsemicolon\b[.,;]?", Opts), ";"),
+        (new(@"[\s,]*\bcolon\b[.,:]?", Opts), ":"),
+        (new(@"[\s,]*\bcomma\b[.,]?", Opts), ","),
+        (new(@"\s*\b(?:open|begin)\s+quotes?\b[.,]?\s*", Opts), " \u201C"),
+        (new(@"[\s,]*\b(?:(?:close|end)\s+quotes?|unquote)\b", Opts), "\u201D"),
+    ];
+
+    /// <summary>"Hello comma how are you question mark" → "Hello, how are you?"</summary>
+    public static string ApplySpokenPunctuation(string text)
+    {
+        foreach (var (pattern, mark) in SpokenMarks) text = pattern.Replace(text, mark);
+        text = Regex.Replace(text, @"([,;:])(?=[\p{L}\p{N}])", "$1 ");
+        text = Regex.Replace(text, @"([.!?])\s+(\p{Ll})", m => m.Groups[1].Value + " " + char.ToUpperInvariant(m.Groups[2].Value[0]));
+        text = Regex.Replace(text, @"([.!?])([.,])", "$1");
+        text = Regex.Replace(text, @"([?!,;:])\s*\1", "$1"); // "you? Question mark." gave "you??"
+        return Regex.Replace(text, @" {2,}", " ").Trim();
     }
 
     /// <summary>The same pipeline with everything taken from the settings.</summary>
@@ -192,6 +256,26 @@ public static class TextCleaner
         var rx = new Regex($@"(?<![\p{{L}}\p{{N}}])(?:{alternation})(?![\p{{L}}\p{{N}}])", Opts);
         string result = rx.Replace(text, m => map.TryGetValue(Key(m.Value), out var to) ? to : m.Value);
         return Regex.Replace(result, @" {2,}", " ").Trim();
+    }
+
+    /// <summary>Phrases Whisper is known to invent from near-silence or background noise.</summary>
+    static readonly HashSet<string> Phantoms = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "thank you", "thank you very much", "thank you so much", "thanks", "thanks for watching",
+        "thank you for watching", "thanks for listening", "thank you for listening", "bye", "bye bye", "you",
+        "please subscribe", "subscribe", "i'm sorry", "okay", "oh", "so", "the end", "subtitles by the amara org community",
+    };
+
+    /// <summary>
+    /// True when the whole transcript is a phrase Whisper tends to invent and the audio held almost no
+    /// clear speech, e.g. "Thank you." from a quiet room. Said deliberately, the same words are kept.
+    /// </summary>
+    public static bool IsLikelyPhantom(string raw, double loudSeconds)
+    {
+        string key = Regex.Replace(raw, @"\[[^\]]*\]|\([^)]*\)", " ").ToLowerInvariant().Replace('’', '\'');
+        key = Regex.Replace(key, @"[^\p{L}\p{N}' ]+", " ").Trim();
+        key = Regex.Replace(key, @"\s+", " ");
+        return (key.Length == 0 || Phantoms.Contains(key)) && loudSeconds < 0.35;
     }
 
     public static int CountWords(string s) =>

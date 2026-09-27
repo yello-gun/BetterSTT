@@ -45,8 +45,11 @@ Every rule can be switched off, and every word list can be edited on the Style p
 | Pause marks | "I was thinking... maybe" becomes "I was thinking maybe" |
 | Verbal fillers, only when they stand alone between commas | "It was, like, huge" becomes "It was huge," while "I like pizza" stays the same |
 | Stutters and restarts | "I think I think the the plan" becomes "I think the plan," and "we were go- going" becomes "we were going" |
+| Mid-sentence corrections | "Let's meet Tuesday, no wait, Wednesday" becomes "Let's meet Wednesday," and "Buy milk. Scratch that. Buy eggs." becomes "Buy eggs." |
 | Notes the model adds | "[BLANK_AUDIO]" and "(music)" are removed |
 | Vague endings (Formal style) | "we could grab lunch or something" becomes "we could grab lunch" |
+
+Corrections are worked out from context. A phrase like "no wait" or "scratch that" only signals that you might be correcting yourself, and BetterSTT compares what you said before and after it to decide what to replace. A day replaces a day, a number replaces a number, a repeated word marks where you restarted, and a new clause replaces the old one. When nothing lines up, as in "I'll be late, sorry, traffic is bad," the words are left alone.
 
 BetterSTT uses rules to clean your text and does not use an AI model to rewrite it. It removes what matches a rule and leaves the rest of your wording alone, which means it can't fix a sentence that doesn't make sense.
 
@@ -61,6 +64,8 @@ A writing style decides how much BetterSTT changes what you said. You can switch
 - Formal does everything Natural does, drops vague endings like "or something," and splits longer text into paragraphs. A new paragraph starts when you change topic ("Also," "Next," "Finally"), after a greeting like "Hi Sarah," before a sign-off like "Thanks," and when a paragraph gets long.
 - Math writes spoken math as symbols, so "x squared plus one over two" becomes x² + 1/2. It can write LaTeX instead.
 
+Every style except Exact words also understands "new line" and "new paragraph" when you say them as their own phrase. A style can also turn spoken punctuation into marks, so "comma," "period" and "question mark" type the symbols.
+
 ## Making it fit how you work
 
 Word fixes correct words BetterSTT keeps getting wrong. If it writes "git hub," click that word in a recent dictation on the Home page and type "GitHub." The fix applies from then on, and the word is also given to the speech model as a hint so it hears it right more often.
@@ -73,7 +78,10 @@ Per-app rules change settings for one app only. Examples are Exact words in a co
 
 ## Reliability
 
-- The shortcut can work as press to start and press to stop, or as hold to talk.
+- The shortcut can work as press to start and press to stop, as hold to talk, or as hands-free.
+- Hands-free keeps listening with no time limit until you press the shortcut again, then types everything at once. It transcribes quietly at each pause while you talk, so even a long session is typed about a second after you stop.
+- The shortcut can be a key combination or a mouse side button.
+- Whisper sometimes invents phrases like "Thank you." from a quiet room. BetterSTT checks how much clear speech the recording held and drops those phrases when there wasn't any.
 - BetterSTT keeps listening for a moment after you stop, so your last word isn't cut off.
 - Esc cancels a dictation without typing anything.
 - Each recording is saved to disk while you speak. If the app crashes or transcription fails, the Home page lets you retry it.
@@ -98,6 +106,7 @@ Your settings, your recent dictations, a log and your speech models are stored i
 - `--transcribe input.wav result.txt` transcribes a 16 kHz mono WAV file and reports how long it took.
 - `--screenshots <folder>` saves every page in light and dark mode as PNG files, using sample data.
 - `--no-paste` sends every dictation to the clipboard and never types into a window. It's meant for automated testing.
+- `--test-audio file.wav`, together with `--no-paste`, plays a 16 kHz mono WAV file instead of the microphone, so automated tests are repeatable.
 
 ## Building from source
 

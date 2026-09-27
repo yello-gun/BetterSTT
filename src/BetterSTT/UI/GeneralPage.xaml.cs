@@ -150,22 +150,30 @@ public partial class GeneralPage : Page
     void RefreshShortcut()
     {
         if (_capturing != null) return;
-        bool hold = _c.Settings.Activation == ActivationMode.Hold;
+        var mode = _c.Settings.Activation;
+        bool hold = mode == ActivationMode.Hold;
 
         ShortcutKeys.Content = Theme.Keycaps(_c.Settings.Hotkey, 13);
         ChangeButton.Content = "Change";
         ShortcutHint.Text = !_c.HotkeyRegistered
             ? "Another app is using this shortcut. Choose a different one."
-            : hold
-                ? "Hold it down while you speak, let go to paste. Esc cancels."
-                : "Press once to start listening, press again to stop and paste. Esc cancels.";
+            : mode switch
+            {
+                ActivationMode.Hold => "Hold it down while you speak, let go to paste. Esc cancels.",
+                ActivationMode.HandsFree => "Press once to start hands-free listening, press again to type everything you said. Esc cancels.",
+                _ => "Press once to start listening, press again to stop and paste. Esc cancels.",
+            };
         ShortcutHint.SetResourceReference(TextBlock.ForegroundProperty, _c.HotkeyRegistered ? Theme.TextSecondary : Theme.Critical);
 
-        ToggleModeButton.Appearance = hold ? ControlAppearance.Transparent : ControlAppearance.Primary;
+        ToggleModeButton.Appearance = mode == ActivationMode.Toggle ? ControlAppearance.Primary : ControlAppearance.Transparent;
         HoldModeButton.Appearance = hold ? ControlAppearance.Primary : ControlAppearance.Transparent;
-        ActivationHint.Text = hold
-            ? "Hold the shortcut while you talk, like a walkie-talkie."
-            : "Press to start listening, press again to stop.";
+        HandsFreeModeButton.Appearance = mode == ActivationMode.HandsFree ? ControlAppearance.Primary : ControlAppearance.Transparent;
+        ActivationHint.Text = mode switch
+        {
+            ActivationMode.Hold => "Hold the shortcut while you talk, like a walkie-talkie.",
+            ActivationMode.HandsFree => "Keeps listening with no time limit until you press the shortcut again, then types everything at once. It transcribes quietly at each pause, so long sessions finish quickly.",
+            _ => "Press to start listening, press again to stop.",
+        };
 
         bool pasteLastOn = _c.Settings.PasteLastEnabled;
         PasteLastKeys.Content = Theme.Keycaps(_c.Settings.PasteLastHotkey, 13);
@@ -182,6 +190,8 @@ public partial class GeneralPage : Page
     void OnToggleMode(object sender, RoutedEventArgs e) => _c.Update(s => s.Activation = ActivationMode.Toggle);
 
     void OnHoldMode(object sender, RoutedEventArgs e) => _c.Update(s => s.Activation = ActivationMode.Hold);
+
+    void OnHandsFreeMode(object sender, RoutedEventArgs e) => _c.Update(s => s.Activation = ActivationMode.HandsFree);
 
     void OnChangeShortcut(object sender, RoutedEventArgs e) => BeginCapture(HotkeyTarget.Dictate);
 
@@ -207,9 +217,13 @@ public partial class GeneralPage : Page
         var (keys, hint, button) = CaptureUi(target);
         button.Content = "Cancel";
         keys.Content = Theme.Text("Press the new shortcut…", 14, Theme.TextSecondary);
-        hint.Text = "Use at least one of Ctrl, Alt, Shift or Win, plus a key. Esc cancels.";
+        hint.Text = "Use at least one of Ctrl, Alt, Shift or Win, plus a key, or click a mouse side button. Esc cancels.";
         hint.SetResourceReference(TextBlock.ForegroundProperty, Theme.TextSecondary);
-        if (_window != null) _window.PreviewKeyDown += OnCaptureKey;
+        if (_window != null)
+        {
+            _window.PreviewKeyDown += OnCaptureKey;
+            _window.PreviewMouseDown += OnCaptureMouse;
+        }
     }
 
     void OnCaptureKey(object sender, KeyEventArgs e)
@@ -238,9 +252,32 @@ public partial class GeneralPage : Page
             return;
         }
 
+        SaveCapture(target, (WinFormsKeys)KeyInterop.VirtualKeyFromKey(key));
+    }
+
+    /// <summary>The mouse's side buttons (and middle click, with a modifier) can be the shortcut too.</summary>
+    void OnCaptureMouse(object sender, MouseButtonEventArgs e)
+    {
+        if (_capturing is not { } target) return;
+        WinFormsKeys? button = e.ChangedButton switch
+        {
+            MouseButton.XButton1 => WinFormsKeys.XButton1,
+            MouseButton.XButton2 => WinFormsKeys.XButton2,
+            MouseButton.Middle => WinFormsKeys.MButton,
+            _ => null,
+        };
+        if (button == null) return; // left and right clicks still work normally, e.g. on Cancel
+        e.Handled = true;
+        SaveCapture(target, button.Value);
+    }
+
+    void SaveCapture(HotkeyTarget target, WinFormsKeys key)
+    {
+        var (_, hint, _) = CaptureUi(target);
+        var mods = Keyboard.Modifiers;
         var binding = new HotkeyBinding
         {
-            Key = (WinFormsKeys)KeyInterop.VirtualKeyFromKey(key),
+            Key = key,
             Ctrl = mods.HasFlag(ModifierKeys.Control),
             Alt = mods.HasFlag(ModifierKeys.Alt),
             Shift = mods.HasFlag(ModifierKeys.Shift),
@@ -261,7 +298,11 @@ public partial class GeneralPage : Page
     {
         if (_capturing == null) return;
         _capturing = null;
-        if (_window != null) _window.PreviewKeyDown -= OnCaptureKey;
+        if (_window != null)
+        {
+            _window.PreviewKeyDown -= OnCaptureKey;
+            _window.PreviewMouseDown -= OnCaptureMouse;
+        }
         _c.ResumeHotkey();
     }
 

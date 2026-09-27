@@ -7,8 +7,12 @@ namespace BetterSTT;
 
 public enum OutputMethod { Paste, Type }
 
-/// <summary>Toggle: press to start, press again to stop. Hold: record while the shortcut is held down.</summary>
-public enum ActivationMode { Toggle, Hold }
+/// <summary>
+/// Toggle: press to start, press again to stop. Hold: record while the shortcut is held down.
+/// HandsFree: keeps listening, with no time limit, transcribing quietly at each pause, and types
+/// everything when it's turned off.
+/// </summary>
+public enum ActivationMode { Toggle, Hold, HandsFree }
 
 public enum OverlayPosition { BottomCenter, BottomLeft, BottomRight, TopCenter, TopLeft, TopRight }
 
@@ -71,6 +75,11 @@ public sealed class WritingStyle
     public bool GreetingAndSignOffLines { get; set; } = true;
     /// <summary>A sentence starting with one of these (a change of topic) begins a new paragraph.</summary>
     public List<string> ParagraphStarters { get; set; } = DefaultParagraphStarters();
+
+    /// <summary>Saying "new line" or "new paragraph" starts one.</summary>
+    public bool SpokenLayout { get; set; } = true;
+    /// <summary>Saying "comma", "period", "question mark"… types the mark.</summary>
+    public bool SpokenPunctuation { get; set; }
 
     /// <summary>Turns spoken math ("x squared plus one") into symbols or LaTeX.</summary>
     public MathFormat SpokenMath { get; set; }
@@ -222,6 +231,9 @@ public sealed class HotkeyBinding
             Keys.OemQuestion => "/",
             Keys.OemPipe => "\\",
             Keys.Return => "Enter",
+            Keys.XButton1 => "Mouse back button",
+            Keys.XButton2 => "Mouse forward button",
+            Keys.MButton => "Middle click",
             Keys.Back => "Backspace",
             Keys.Next => "Page Down",
             Keys.Prior => "Page Up",
@@ -244,6 +256,8 @@ public sealed class CleanupOptions
     public bool RemoveStutters { get; set; } = true;
     public bool RemoveDiscourseMarkers { get; set; } = true;
     public bool RemoveNonSpeechTags { get; set; } = true;
+    /// <summary>"Tuesday, no wait, Wednesday" → "Wednesday", worked out from context.</summary>
+    public bool FixCorrections { get; set; } = true;
 
     public List<string> FillerSounds { get; set; } =
         ["um", "uh", "uhm", "erm", "er", "hmm", "hm", "mm", "ah", "eh"];

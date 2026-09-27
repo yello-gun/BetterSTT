@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Whisper.net;
 using Whisper.net.Ggml;
 using Whisper.net.LibraryLoader;
@@ -120,7 +120,8 @@ public sealed class Transcriber : IDisposable
             ? builder.WithLanguageDetection()
             : builder.WithLanguage(s.Language.Trim());
 
-        using var processor = builder.Build();
+        // Async disposal waits for a cancelled run (a live preview stopped mid-way) to wind down first.
+        await using var processor = builder.Build();
         var text = new StringBuilder();
         await foreach (var segment in processor.ProcessAsync(samples, ct))
             text.Append(segment.Text);
