@@ -60,11 +60,16 @@ public static class TextCleaner
     }
 
     /// <summary>
-    /// The full text pipeline: cleanup, the style's extra trimming, word fixes, then paragraphs.
-    /// The Exact words style (or cleanup switched off) returns the transcript as heard.
+    /// The full text pipeline: cleanup, the style's extra trimming, word fixes, spoken math, then paragraphs.
+    /// The Exact words style (or cleanup switched off) returns the transcript as heard. A dictation that is
+    /// just a snippet's trigger becomes the snippet's text, in every style.
     /// </summary>
-    public static string Process(string raw, CleanupOptions cleanup, IReadOnlyList<Replacement> replacements, WritingStyle? style = null)
+    public static string Process(string raw, CleanupOptions cleanup, IReadOnlyList<Replacement> replacements,
+        WritingStyle? style = null, IReadOnlyList<Snippet>? snippets = null)
     {
+        if (snippets is { Count: > 0 } && (MatchSnippet(Clean(raw, cleanup), snippets) ?? MatchSnippet(raw, snippets)) is { } snippet)
+            return snippet;
+
         style ??= WritingStyle.Natural();
         if (style.ExactWords || !cleanup.Enabled)
             return string.IsNullOrWhiteSpace(raw) ? "" : Regex.Replace(raw, @"\s+", " ").Trim();
@@ -72,8 +77,26 @@ public static class TextCleaner
         string s = Clean(raw, cleanup);
         if (style.RemoveVagueEndings) s = RemoveVagueEndings(s, style.VagueEndings);
         s = ApplyReplacements(s, replacements);
+        s = SpokenMath.Convert(s, style.SpokenMath);
         if (style.AutoParagraphs) s = FormatParagraphs(s, style);
         return s;
+    }
+
+    /// <summary>The same pipeline with everything taken from the settings.</summary>
+    public static string Process(string raw, AppSettings s) =>
+        Process(raw, s.Cleanup, s.Replacements, s.CurrentStyle, s.Snippets);
+
+    /// <summary>
+    /// The text of the snippet whose trigger is the whole of <paramref name="text"/>, ignoring case and
+    /// punctuation ("My email." matches "my email"), or null.
+    /// </summary>
+    public static string? MatchSnippet(string text, IReadOnlyList<Snippet> snippets)
+    {
+        static string Key(string s) => Regex.Replace(s.ToLowerInvariant(), @"[^\p{L}\p{N}]+", " ").Trim();
+        string key = Key(text);
+        if (key.Length == 0) return null;
+        var hit = snippets.FirstOrDefault(s => s.Text.Trim().Length > 0 && Key(s.Trigger) == key);
+        return hit?.Text.Replace("\r\n", "\n").Trim();
     }
 
     /// <summary>

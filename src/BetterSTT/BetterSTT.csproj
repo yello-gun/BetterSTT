@@ -11,7 +11,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\..\assets\BetterSTT.ico</ApplicationIcon>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <Version>2.5.0</Version>
+    <Version>2.6.0</Version>
     <!-- Keep the product version a plain x.y.z (no "+commit" suffix); code signing checks it. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Product>BetterSTT</Product>

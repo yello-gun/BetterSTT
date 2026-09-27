@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using Wpf.Ui.Controls;
@@ -103,6 +103,12 @@ public partial class AppsPage : Page
         options.Children.Add(Option("How text is entered", ["Usual", "Paste", "Type characters"],
             profile.OutputMethod switch { null => 0, OutputMethod.Paste => 1, _ => 2 },
             i => Edit(p => p.OutputMethod = i switch { 1 => OutputMethod.Paste, 2 => OutputMethod.Type, _ => null })));
+        // Languages the app's model can hear; "Usual" follows the Speech page.
+        var languages = AppSettings.Languages;
+        int languageIndex = profile.Language == null ? 0 : Array.FindIndex(languages, l => l.Code == profile.Language) + 1;
+        options.Children.Add(Option("Language you speak", ["Usual", .. languages.Select(l => l.Name)],
+            Math.Max(0, languageIndex),
+            i => Edit(p => p.Language = i == 0 ? null : languages[i - 1].Code)));
         options.Children.Add(Option("Listening indicator", ["Usual", "Show", "Hide"],
             profile.ShowOverlay switch { null => 0, true => 1, false => 2 },
             i => Edit(p => p.ShowOverlay = i switch { 1 => true, 2 => false, _ => null })));

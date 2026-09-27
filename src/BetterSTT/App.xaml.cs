@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using BetterSTT.UI;
 using Wpf.Ui.Appearance;
 
@@ -8,8 +8,10 @@ public partial class App : Application
 {
     readonly AppSettings _settings;
     readonly bool _background;
-    readonly EventWaitHandle _showSignal;
+    readonly Signals _signals;
     readonly string? _screenshotDir;
+    readonly string? _command;
+    readonly bool _updated;
 
     DictationController? _controller;
     TrayIcon? _tray;
@@ -17,12 +19,14 @@ public partial class App : Application
     MainWindow? _main;
     volatile bool _exiting;
 
-    public App(AppSettings settings, bool background, EventWaitHandle showSignal, string? screenshotDir)
+    public App(AppSettings settings, bool background, Signals signals, string? screenshotDir, string? command, bool updated)
     {
         _settings = settings;
         _background = background;
-        _showSignal = showSignal;
+        _signals = signals;
         _screenshotDir = screenshotDir;
+        _command = command;
+        _updated = updated;
         DispatcherUnhandledException += (_, e) =>
         {
             Log.Write($"UI error: {e.Exception}");
@@ -51,25 +55,56 @@ public partial class App : Application
 
         _overlay = new OverlayWindow(_controller);
         _tray = new TrayIcon(_controller, ShowMainWindow, ExitApp);
-        _controller.Start();
-        ListenForShowSignal();
+        _controller.Start(checkForUpdates: !TextInjector.ClipboardOnly);
+        ListenForSignals();
         if (!_background) ShowMainWindow();
+        if (_updated) _controller.Announce($"BetterSTT was updated to {Updater.Current.ToString(3)}.");
+        if (_command != null) RunCommand(_command);
     }
 
-    /// <summary>Another launch of BetterSTT signals this instance to open its window.</summary>
-    void ListenForShowSignal()
+    /// <summary>Another launch of BetterSTT asks this instance to open its window or run a command.</summary>
+    void ListenForSignals()
     {
         var thread = new Thread(() =>
         {
             while (true)
             {
-                _showSignal.WaitOne();
+                string signal = _signals.Wait();
                 if (_exiting) return;
-                Dispatcher.BeginInvoke(ShowMainWindow);
+                Dispatcher.BeginInvoke(() => RunCommand(signal));
             }
         })
-        { IsBackground = true, Name = "ShowSignal" };
+        { IsBackground = true, Name = "Signals" };
         thread.Start();
+    }
+
+    void RunCommand(string command)
+    {
+        switch (command)
+        {
+            case Signals.Show:
+                // Opening the app is when a downloaded update installs, unless it's busy.
+                if (_controller!.Settings.CheckForUpdates && _controller.AvailableUpdate is { } update
+                    && _controller.State == DictationState.Idle && Updater.ShouldAutoInstall(update))
+                {
+                    InstallUpdate();
+                    return;
+                }
+                ShowMainWindow();
+                break;
+            case "toggle": _controller!.Toggle(); break;
+            case "paste-last": _ = _controller!.PasteLastAsync(); break;
+            case "cancel": _ = _controller!.CancelAsync(); break;
+        }
+    }
+
+    /// <summary>Installs the downloaded update and reopens BetterSTT with its window. False if it couldn't start.</summary>
+    public bool InstallUpdate()
+    {
+        if (_controller?.AvailableUpdate is not { } update || _controller.State != DictationState.Idle) return false;
+        if (!Updater.Install(update, openWindow: true)) return false;
+        ExitApp();
+        return true;
     }
 
     public void ShowMainWindow()

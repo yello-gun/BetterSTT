@@ -122,7 +122,7 @@ public class StyleSettingsTests
         Assert.Equal(WritingStyle.ExactName, s.Style);
         Assert.True(s.Cleanup.Enabled);
         Assert.Equal(WritingStyle.ExactName, s.AppProfiles[0].Style);
-        Assert.Equal([WritingStyle.ExactName, WritingStyle.NaturalName, WritingStyle.FormalName], s.Styles.Select(x => x.Name));
+        Assert.Equal([WritingStyle.ExactName, WritingStyle.NaturalName, WritingStyle.FormalName, WritingStyle.MathName], s.Styles.Select(x => x.Name));
     }
 
     [Fact]

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -68,6 +68,8 @@ public partial class GeneralPage : Page
         LivePreviewSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.LivePreview = false); };
         PasteLastSwitch.Checked += (_, _) => { if (!_building) _c.Update(s => s.PasteLastEnabled = true); };
         PasteLastSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.PasteLastEnabled = false); };
+        UpdateSwitch.Checked += (_, _) => { if (!_building) _c.Update(s => s.CheckForUpdates = true); RefreshUpdates(); };
+        UpdateSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.CheckForUpdates = false); RefreshUpdates(); };
 
         var version = typeof(GeneralPage).Assembly.GetName().Version;
         AboutText.Text = $"BetterSTT {version?.ToString(3)} · Settings and models are stored in %LOCALAPPDATA%\\BetterSTT";
@@ -77,6 +79,7 @@ public partial class GeneralPage : Page
             _window = Window.GetWindow(this);
             if (_window != null) _window.Deactivated += OnWindowDeactivated;
             _c.SettingsChanged += RefreshShortcut;
+            _c.UpdateChanged += RefreshUpdates;
             Build();
             _monitor.Start(_c.Settings.MicrophoneDevice);
         };
@@ -85,6 +88,7 @@ public partial class GeneralPage : Page
             EndCapture();
             if (_window != null) _window.Deactivated -= OnWindowDeactivated;
             _c.SettingsChanged -= RefreshShortcut;
+            _c.UpdateChanged -= RefreshUpdates;
             _monitor.Stop();
         };
     }
@@ -108,7 +112,9 @@ public partial class GeneralPage : Page
         OverlaySwitch.IsChecked = _c.Settings.ShowOverlay;
         OverlayDetails.Visibility = _c.Settings.ShowOverlay ? Visibility.Visible : Visibility.Collapsed;
         LivePreviewSwitch.IsChecked = _c.Settings.LivePreview;
+        UpdateSwitch.IsChecked = _c.Settings.CheckForUpdates;
         _building = false;
+        RefreshUpdates();
 
         RefreshShortcut();
         RefreshOutput();
@@ -321,6 +327,63 @@ public partial class GeneralPage : Page
     {
         _c.Update(s => s.OutputMethod = OutputMethod.Type);
         RefreshOutput();
+    }
+
+    // ---- updates and diagnostics ----
+
+    void RefreshUpdates()
+    {
+        string version = Updater.Current.ToString(3);
+        CheckButton.IsEnabled = !_c.CheckingForUpdates;
+        if (_c.AvailableUpdate is { } update)
+        {
+            UpdateStatus.Text = $"BetterSTT {update.Version.ToString(3)} is downloaded. It installs the next time you open the app.";
+            CheckButton.Content = "Install now";
+            return;
+        }
+        CheckButton.Content = "Check now";
+        string checkedAt = _c.Settings.LastUpdateCheck is { } last ? $" Last checked {Theme.TimeAgo(last).Replace("Just now", "just now")}." : "";
+        UpdateStatus.Text = _c.CheckingForUpdates
+            ? "Checking GitHub for a new version…"
+            : _c.UpdateError is { } error
+                ? $"The check didn't work: {error}"
+                : _c.Settings.CheckForUpdates
+                    ? $"You have {version}. BetterSTT checks GitHub once a day and downloads new versions in the background.{checkedAt}"
+                    : $"You have {version}. Automatic checks are off; nothing is sent until you click Check now.{checkedAt}";
+    }
+
+    async void OnCheckUpdates(object sender, RoutedEventArgs e)
+    {
+        if (_c.AvailableUpdate != null)
+        {
+            if (!((App)Application.Current).InstallUpdate())
+                UpdateStatus.Text = "The update couldn't start while a dictation is in progress. Try again in a moment.";
+            return;
+        }
+        await _c.CheckForUpdatesAsync();
+        if (_c.AvailableUpdate == null && _c.UpdateError == null)
+            UpdateStatus.Text = $"You have the latest version ({Updater.Current.ToString(3)}).";
+    }
+
+    void OnSaveDiagnostics(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = $"BetterSTT-diagnostics-{DateTime.Now:yyyyMMdd-HHmm}.zip",
+            Filter = "Zip file|*.zip",
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+        };
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
+        try
+        {
+            Diagnostics.Save(dialog.FileName, _c);
+            DiagnosticsHint.Text = $"Saved {Path.GetFileName(dialog.FileName)}, with {string.Join(", ", Diagnostics.Contents)}. Open it to check what's inside before sharing it.";
+            Process.Start("explorer.exe", $"/select,\"{dialog.FileName}\"");
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsHint.Text = $"Couldn't save it: {ex.Message}";
+        }
     }
 
     void OnOpenData(object sender, RoutedEventArgs e)

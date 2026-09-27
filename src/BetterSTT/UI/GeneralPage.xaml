@@ -1,4 +1,4 @@
-<Page
+﻿<Page
     x:Class="BetterSTT.UI.GeneralPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -158,6 +158,37 @@
                     </StackPanel>
                 </StackPanel>
             </StackPanel>
+        </Border>
+
+        <TextBlock Style="{StaticResource SectionTitle}" Text="Updates and help" />
+        <Border Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Body}" Text="Check for updates automatically" />
+                    <TextBlock x:Name="UpdateStatus" Margin="0,2,0,0" Style="{StaticResource Caption}" />
+                </StackPanel>
+                <ui:Button x:Name="CheckButton" Grid.Column="1" MinWidth="110" Margin="16,0" Click="OnCheckUpdates" Content="Check now" />
+                <ui:ToggleSwitch x:Name="UpdateSwitch" Grid.Column="2" VerticalAlignment="Center" AutomationProperties.Name="Check for updates automatically" />
+            </Grid>
+        </Border>
+
+        <Border Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Body}" Text="Save diagnostics" />
+                    <TextBlock x:Name="DiagnosticsHint" Margin="0,2,16,0" Style="{StaticResource Caption}" Text="For a bug report: a .zip with the log, your Windows version and GPU, and your settings. It never includes anything you dictated, and your word fixes, snippets and vocabulary are hidden." />
+                </StackPanel>
+                <ui:Button Grid.Column="1" MinWidth="110" Click="OnSaveDiagnostics" Content="Save…" Icon="{ui:SymbolIcon Save24}" />
+            </Grid>
         </Border>
 
         <Grid Margin="0,16,0,0">

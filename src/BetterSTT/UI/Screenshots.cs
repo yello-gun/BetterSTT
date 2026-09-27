@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Wpf.Ui.Appearance;
@@ -17,7 +17,7 @@ static class Screenshots
         Directory.CreateDirectory(dir);
         try
         {
-            App.Controller.Start();
+            App.Controller.Start(checkForUpdates: false);
             for (int i = 0; i < 160 && App.Controller.ModelState != ModelState.Ready; i++) await Task.Delay(250);
 
             (string Name, Type Page)[] pages =
@@ -48,6 +48,15 @@ static class Screenshots
                     window.NavigateTo(page);
                     await Task.Delay(900);
                     Save(window, Path.Combine(dir, $"{name}-{(dark ? "dark" : "light")}.png"));
+                }
+                if (dark) // last window, so no other screenshot shows the banner
+                {
+                    // The banner shown when a new version is ready.
+                    App.Controller.ShowSampleUpdate();
+                    window.NavigateTo(typeof(HomePage));
+                    window.Height = 420;
+                    await Task.Delay(900);
+                    Save(window, Path.Combine(dir, "update-banner-dark.png"));
                 }
                 window.Close();
             }

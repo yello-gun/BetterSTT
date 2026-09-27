@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows.Forms;
 using Whisper.net.Ggml;
@@ -19,6 +19,16 @@ public sealed class Replacement
     public string To { get; set; } = "";
 }
 
+/// <summary>Saying <see cref="Trigger"/> as a whole dictation types <see cref="Text"/> instead.</summary>
+public sealed class Snippet
+{
+    public string Trigger { get; set; } = "";
+    public string Text { get; set; } = "";
+}
+
+/// <summary>How a style writes spoken math: left as words, as symbols (x² + 1/2), or as LaTeX (x^2 + \frac{1}{2}).</summary>
+public enum MathFormat { Off, Symbols, Latex }
+
 /// <summary>Settings that apply only while dictating into one app. Null means "same as everywhere else".</summary>
 public sealed class AppProfile
 {
@@ -29,6 +39,8 @@ public sealed class AppProfile
     public bool? ShowOverlay { get; set; }
     /// <summary>Writing style for this app, by name; null uses the usual style.</summary>
     public string? Style { get; set; }
+    /// <summary>Speech language for this app (a code from <see cref="AppSettings.Languages"/>); null uses the usual one.</summary>
+    public string? Language { get; set; }
     /// <summary>Before 2.5: exact words per app. Read only to migrate it to <see cref="Style"/>.</summary>
     public bool ExactWords { get; set; }
 }
@@ -39,7 +51,7 @@ public sealed class AppProfile
 /// </summary>
 public sealed class WritingStyle
 {
-    public const string ExactName = "Exact words", NaturalName = "Natural", FormalName = "Formal";
+    public const string ExactName = "Exact words", NaturalName = "Natural", FormalName = "Formal", MathName = "Math";
 
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
@@ -59,6 +71,9 @@ public sealed class WritingStyle
     public bool GreetingAndSignOffLines { get; set; } = true;
     /// <summary>A sentence starting with one of these (a change of topic) begins a new paragraph.</summary>
     public List<string> ParagraphStarters { get; set; } = DefaultParagraphStarters();
+
+    /// <summary>Turns spoken math ("x squared plus one") into symbols or LaTeX.</summary>
+    public MathFormat SpokenMath { get; set; }
 
     public static List<string> DefaultVagueEndings() =>
     [
@@ -92,7 +107,13 @@ public sealed class WritingStyle
         Description = "Also drops vague endings like “or something” and splits text into paragraphs.",
     };
 
-    public static List<WritingStyle> Defaults() => [Exact(), Natural(), Formal()];
+    public static WritingStyle MathStyle() => new()
+    {
+        Name = MathName, BuiltIn = true, SpokenMath = MathFormat.Symbols,
+        Description = "Writes spoken math as symbols: “x squared plus one over two” → x² + 1/2.",
+    };
+
+    public static List<WritingStyle> Defaults() => [Exact(), Natural(), Formal(), MathStyle()];
 }
 
 public static class AppPaths
@@ -293,6 +314,13 @@ public sealed class AppSettings
     /// <summary>Word fixes applied after cleanup, e.g. "git hub" → "GitHub".</summary>
     public List<Replacement> Replacements { get; set; } = new();
 
+    /// <summary>Spoken shortcuts for longer text, e.g. "my email" → an address.</summary>
+    public List<Snippet> Snippets { get; set; } = new();
+
+    /// <summary>Looks for a new version on GitHub once a day and downloads it in the background.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+    public DateTime? LastUpdateCheck { get; set; }
+
     /// <summary>Per-app overrides, matched by process name. Terminals get no trailing space by default.</summary>
     public List<AppProfile> AppProfiles { get; set; } =
     [
@@ -360,6 +388,12 @@ public sealed class AppSettings
         ]);
         s.AppProfiles.Add(new AppProfile { ProcessName = "Code", DisplayName = "Visual Studio Code", Style = WritingStyle.ExactName, AddTrailingSpace = false });
         s.AppProfiles.Add(new AppProfile { ProcessName = "OUTLOOK", DisplayName = "Microsoft Outlook", Style = WritingStyle.FormalName });
+        s.AppProfiles.Add(new AppProfile { ProcessName = "WhatsApp", DisplayName = "WhatsApp", Language = "es" });
+        s.Snippets.AddRange(
+        [
+            new() { Trigger = "my email", Text = "sam@example.com" },
+            new() { Trigger = "my sign off", Text = "Best regards,\nSam" },
+        ]);
         s.Style = WritingStyle.FormalName;
         return s;
     }
@@ -376,6 +410,7 @@ public sealed class AppSettings
         if (p.AddTrailingSpace is { } space) s.AddTrailingSpace = space;
         if (p.OutputMethod is { } method) s.OutputMethod = method;
         if (p.ShowOverlay is { } overlay) s.ShowOverlay = overlay;
+        if (!string.IsNullOrWhiteSpace(p.Language)) s.Language = p.Language;
         if (p.ExactWords) s.Style = WritingStyle.ExactName; // unmigrated pre-2.5 profile
         if (p.Style != null && s.Styles.Any(st => string.Equals(st.Name, p.Style, StringComparison.OrdinalIgnoreCase)))
             s.Style = p.Style;
@@ -409,8 +444,10 @@ public sealed class AppSettings
     public void Save()
     {
         Directory.CreateDirectory(AppPaths.Data);
-        File.WriteAllText(AppPaths.SettingsFile, JsonSerializer.Serialize(this, Json));
+        File.WriteAllText(AppPaths.SettingsFile, ToJson());
     }
+
+    public string ToJson() => JsonSerializer.Serialize(this, Json);
 
     public AppSettings Clone() =>
         JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(this, Json), Json)!;

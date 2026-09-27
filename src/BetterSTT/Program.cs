@@ -6,8 +6,6 @@ namespace BetterSTT;
 
 static class Program
 {
-    const string ShowSignalName = @"Local\BetterSTT.ShowWindow";
-
     [STAThread]
     static void Main(string[] args)
     {
@@ -25,16 +23,19 @@ static class Program
 
         string? screenshotDir = args is ["--screenshots", var dir] ? dir : null;
         bool background = args.Contains("--background");
-        TextInjector.ClipboardOnly = args.Contains("--no-paste");
+        bool testRun = args.Contains("--no-paste");
+        TextInjector.ClipboardOnly = testRun;
+        // --toggle, --paste-last, --cancel: control the running copy from a launcher, Stream Deck or script.
+        string? command = args.Select(a => a.TrimStart('-').ToLowerInvariant()).FirstOrDefault(Signals.Commands.Contains);
 
         using var mutex = new Mutex(true, @"Local\BetterSTT.SingleInstance", out bool firstInstance);
         if (!firstInstance && screenshotDir == null)
         {
-            // Already running: ask that instance to open its window instead.
-            try { EventWaitHandle.OpenExisting(ShowSignalName).Set(); } catch { /* old version without the signal */ }
+            // Already running: pass the command on, or ask that instance to open its window.
+            Signals.Send(command ?? Signals.Show);
             return;
         }
-        using var showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, screenshotDir == null ? ShowSignalName : null);
+        using var signals = new Signals(named: screenshotDir == null);
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Write($"Fatal: {e.ExceptionObject}");
 
@@ -42,9 +43,18 @@ static class Program
 
         // Screenshots use default settings and sample history so nothing personal ends up in them.
         var settings = screenshotDir == null ? AppSettings.Load() : AppSettings.Sample();
+
+        // A downloaded update installs when the app is opened. The installer reopens BetterSTT afterwards.
+        if (screenshotDir == null && !testRun && command == null && settings.CheckForUpdates
+            && Updater.Ready() is { } update && Updater.ShouldAutoInstall(update)
+            && Updater.Install(update, openWindow: !background))
+        {
+            return;
+        }
+
         UseRuntime(settings);
 
-        var app = new App(settings, background, showSignal, screenshotDir);
+        var app = new App(settings, background || command != null, signals, screenshotDir, command, args.Contains("--updated"));
         app.InitializeComponent();
         app.Run();
     }
@@ -92,5 +102,36 @@ static class Program
         {
             File.WriteAllText(outFile, ex.ToString());
         }
+    }
+}
+
+/// <summary>Named events another launch of BetterSTT uses to reach the copy that's already running.</summary>
+public sealed class Signals : IDisposable
+{
+    public const string Show = "show";
+    public static readonly string[] Commands = ["toggle", "paste-last", "cancel"];
+    static readonly string[] All = [Show, .. Commands];
+
+    // "ShowWindow" is the name versions before 2.6 listen on.
+    static string EventName(string signal) => signal == Show ? @"Local\BetterSTT.ShowWindow" : $@"Local\BetterSTT.{signal}";
+
+    readonly EventWaitHandle[] _handles;
+
+    /// <param name="named">False for a private set that nothing else can signal (screenshot mode).</param>
+    public Signals(bool named) =>
+        _handles = All.Select(s => new EventWaitHandle(false, EventResetMode.AutoReset, named ? EventName(s) : null)).ToArray();
+
+    public static void Send(string signal)
+    {
+        try { EventWaitHandle.OpenExisting(EventName(signal)).Set(); }
+        catch { /* the running copy is too old to know this signal */ }
+    }
+
+    /// <summary>Blocks until a signal arrives and returns its name.</summary>
+    public string Wait() => All[WaitHandle.WaitAny(_handles)];
+
+    public void Dispose()
+    {
+        foreach (var h in _handles) h.Dispose();
     }
 }

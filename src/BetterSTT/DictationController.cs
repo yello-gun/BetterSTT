@@ -1,4 +1,5 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
+using System.Net.Http;
 using System.Windows.Threading;
 using WinFormsKeys = System.Windows.Forms.Keys;
 
@@ -53,6 +54,7 @@ public sealed class DictationController : IDisposable
     readonly DispatcherTimer _previewTimer;
     CancellationTokenSource _previewCts = new();
     bool _previewBusy;
+    readonly DispatcherTimer _updateTimer;
 
     public DictationController(AppSettings settings, HistoryStore? history = null)
     {
@@ -78,6 +80,14 @@ public sealed class DictationController : IDisposable
         _previewTimer.Tick += (_, _) => _ = UpdatePreviewAsync();
         _idleTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
         _idleTimer.Tick += (_, _) => _ = UnloadIfIdleAsync();
+        // The first update check waits until startup has settled, then it's looked at hourly.
+        _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _updateTimer.Tick += (_, _) =>
+        {
+            _updateTimer.Interval = TimeSpan.FromHours(1);
+            bool due = Settings.LastUpdateCheck is not { } last || DateTime.Now - last > TimeSpan.FromHours(24);
+            if (Settings.CheckForUpdates && due) _ = CheckForUpdatesAsync();
+        };
 
         _hotkey.Pressed += OnHotkey;
         _recorder.LevelChanged += level => _ui.BeginInvoke(() => LevelChanged?.Invoke(level));
@@ -139,11 +149,17 @@ public sealed class DictationController : IDisposable
     /// <summary>A message for the user (shown as a tray notification). The flag marks problems.</summary>
     public event Action<string, bool>? Notice;
 
-    public void Start()
+    /// <param name="checkForUpdates">False for screenshots and test runs, which must not touch the network or settings.</param>
+    public void Start(bool checkForUpdates = true)
     {
         RegisterHotkeys(announceConflict: true);
         _modelTask = LoadModelAsync();
         _idleTimer.Start();
+        if (checkForUpdates)
+        {
+            AvailableUpdate = Updater.Ready();
+            _updateTimer.Start();
+        }
 
         int pending = PendingRecordings.Count;
         if (pending > 0)
@@ -496,7 +512,7 @@ public sealed class DictationController : IDisposable
         LastTranscribeSeconds = timer.Elapsed.TotalSeconds;
         LastAudioSeconds = audio.Length / (double)AudioRecorder.SampleRate;
         _lastUsed = DateTime.Now;
-        return (raw, TextCleaner.Process(raw, settings.Cleanup, settings.Replacements, settings.CurrentStyle));
+        return (raw, TextCleaner.Process(raw, settings));
     }
 
     /// <summary>Types or pastes the text, falling back to the clipboard where typing can't reach.</summary>
@@ -546,7 +562,7 @@ public sealed class DictationController : IDisposable
         {
             string raw = await Task.Run(() => _transcriber.TranscribeAsync(audio, settings, ct), ct);
             if (ct.IsCancellationRequested || State != DictationState.Recording) return;
-            PreviewText = TextCleaner.Process(raw, settings.Cleanup, settings.Replacements, settings.CurrentStyle)
+            PreviewText = TextCleaner.Process(raw, settings)
                 .Replace("\n\n", " ");
             PreviewChanged?.Invoke();
             // Refresh about twice as often as a preview takes, within 0.8–4 s.
@@ -571,6 +587,54 @@ public sealed class DictationController : IDisposable
         _previewTimer.Stop();
         _previewCts.Cancel();
         _previewCts = new CancellationTokenSource();
+    }
+
+    /// <summary>Shows an informational message as a tray notification.</summary>
+    public void Announce(string message) => Notice?.Invoke(message, false);
+
+    // ---- updates ----
+
+    /// <summary>A newer version, downloaded and ready to install.</summary>
+    public UpdateInfo? AvailableUpdate { get; private set; }
+    public bool CheckingForUpdates { get; private set; }
+    /// <summary>Why the last check failed, or null.</summary>
+    public string? UpdateError { get; private set; }
+    public event Action? UpdateChanged;
+
+    /// <summary>For screenshots: shows the update banner for a made-up version.</summary>
+    public void ShowSampleUpdate()
+    {
+        AvailableUpdate = new UpdateInfo(new Version(Updater.Current.Major, Updater.Current.Minor, Updater.Current.Build + 1), "");
+        UpdateChanged?.Invoke();
+    }
+
+    /// <summary>Looks for a new release and downloads it in the background.</summary>
+    public async Task CheckForUpdatesAsync()
+    {
+        if (CheckingForUpdates) return;
+        CheckingForUpdates = true;
+        UpdateError = null;
+        UpdateChanged?.Invoke();
+        try
+        {
+            var found = await Task.Run(() => Updater.CheckAsync(CancellationToken.None));
+            bool isNew = found != null && found.Version != AvailableUpdate?.Version;
+            AvailableUpdate = found;
+            // Only a completed check counts; after a failure (e.g. offline) it tries again within the hour.
+            Update(s => s.LastUpdateCheck = DateTime.Now);
+            if (isNew)
+                Notice?.Invoke($"BetterSTT {found!.Version} is ready. It installs the next time you open BetterSTT, or choose Install now in its window.", false);
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"Update check failed: {ex.Message}");
+            UpdateError = ex is HttpRequestException ? "Couldn't reach GitHub. Check your internet connection." : ex.Message;
+        }
+        finally
+        {
+            CheckingForUpdates = false;
+            UpdateChanged?.Invoke();
+        }
     }
 
     // ---- paste last / recovery ----
@@ -649,6 +713,7 @@ public sealed class DictationController : IDisposable
     {
         if (_saveTimer.IsEnabled) SaveSettings();
         _idleTimer.Stop();
+        _updateTimer.Stop();
         _hotkey.Dispose();
         _recorder.Dispose();
         _transcriber.Dispose();

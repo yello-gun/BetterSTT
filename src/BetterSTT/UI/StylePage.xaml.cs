@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Shapes;
@@ -17,6 +17,8 @@ public partial class StylePage : Page
     const string SampleSpeech =
         "Um, hi Sarah, so I was thinking... like, maybe we could, uh, meet on Tuesday or something. " +
         "I think I think the the new approach is better. Also, can you send the slides and stuff? Thanks.";
+
+    const string MathSample = "Um, so x squared plus two x plus one equals open parenthesis x plus one close parenthesis squared.";
 
     /// <summary>One card per cleanup rule: how to read/write its switch and (optionally) its word list.</summary>
     sealed record Rule(
@@ -60,6 +62,9 @@ public partial class StylePage : Page
 
     void RefreshStyles()
     {
+        // The "Try it" box shows math for a math style, as long as it still holds one of the samples.
+        if (SampleBox.Text is SampleSpeech or MathSample)
+            SampleBox.Text = Current.SpokenMath != MathFormat.Off ? MathSample : SampleSpeech;
         StyleCards.Children.Clear();
         foreach (var style in _c.Settings.Styles) StyleCards.Children.Add(StyleCard(style));
         BuildEditor();
@@ -122,6 +127,7 @@ public partial class StylePage : Page
                 MaxSentencesPerParagraph = source.MaxSentencesPerParagraph,
                 GreetingAndSignOffLines = source.GreetingAndSignOffLines,
                 ParagraphStarters = source.ParagraphStarters.ToList(),
+                SpokenMath = source.SpokenMath,
             });
             s.Style = name;
         });
@@ -220,6 +226,28 @@ public partial class StylePage : Page
         Editor.Children.Add(Option("Automatic paragraphs",
             "Starts a new paragraph, with a blank line before it, when you change topic (“Also…”, “Next…”), after a greeting, before a sign-off, and when a paragraph gets long.",
             style.AutoParagraphs, on => EditStyle(s => s.AutoParagraphs = on), paragraphDetails));
+
+        // Spoken math
+        var mathDetails = new StackPanel { Orientation = Orientation.Horizontal };
+        var formatLabel = Theme.Text("Write it as", 13, Theme.TextSecondary);
+        formatLabel.VerticalAlignment = VerticalAlignment.Center;
+        var formatBox = new ComboBox
+        {
+            ItemsSource = new[] { "Symbols: x² + 1/2", @"LaTeX: x^2 + \frac{1}{2}" },
+            SelectedIndex = style.SpokenMath == MathFormat.Latex ? 1 : 0,
+            Margin = new Thickness(8, 0, 0, 0),
+            MinWidth = 220,
+        };
+        System.Windows.Automation.AutomationProperties.SetName(formatBox, "Math format");
+        formatBox.SelectionChanged += (_, _) =>
+            EditStyle(s => s.SpokenMath = formatBox.SelectedIndex == 1 ? MathFormat.Latex : MathFormat.Symbols);
+        mathDetails.Children.Add(formatLabel);
+        mathDetails.Children.Add(formatBox);
+        Editor.Children.Add(Option("Spoken math",
+            "Writes math you say as symbols: numbers, plus, minus, times, over, equals, squared, to the power of, square root, pi, Greek letters and brackets. Number words stay words unless math is said with them.",
+            style.SpokenMath != MathFormat.Off,
+            on => EditStyle(s => s.SpokenMath = on ? (formatBox.SelectedIndex == 1 ? MathFormat.Latex : MathFormat.Symbols) : MathFormat.Off),
+            mathDetails));
     }
 
     void Rename(string oldName, string newName)
@@ -408,7 +436,7 @@ public partial class StylePage : Page
         if (DiffText == null) return;
         string raw = SampleBox.Text;
         var s = _c.Settings;
-        string clean = TextCleaner.Process(raw, s.Cleanup, s.Replacements, s.CurrentStyle);
+        string clean = TextCleaner.Process(raw, s);
         Theme.ShowDiff(DiffText, raw, clean);
         ResultText.Text = clean.Length > 0 ? clean : "(nothing left)";
         int removed = Math.Max(0, TextCleaner.CountWords(raw) - TextCleaner.CountWords(clean));

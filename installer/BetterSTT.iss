@@ -41,8 +41,10 @@ WizardStyle=modern
 CloseApplications=force
 
 [Tasks]
-Name: "startup"; Description: "Start BetterSTT when I sign in to Windows"; GroupDescription: "Options:"
-Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Options:"; Flags: unchecked
+; Only offered on a first install. An update leaves shortcuts and the startup entry as the user left them
+; (the app manages "Start with Windows" itself), so a deleted desktop shortcut doesn't come back.
+Name: "startup"; Description: "Start BetterSTT when I sign in to Windows"; GroupDescription: "Options:"; Check: not IsUpgrade
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Options:"; Flags: unchecked; Check: not IsUpgrade
 
 [InstallDelete]
 ; Leftovers from the earlier names.
@@ -57,8 +59,9 @@ Type: files; Name: "{userdesktop}\BetterTTS.lnk"
 Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
-Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
+; The app's path never changes, so existing Start menu shortcuts are kept rather than recreated on update.
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"; Check: IsMissing('{group}\{#AppName}.lnk')
+Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"; Check: IsMissing('{group}\Uninstall {#AppName}.lnk')
 Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
 [Registry]
@@ -69,11 +72,47 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Launch BetterSTT now"; Flags: nowait postinstall skipifsilent
+; In-app updates run the installer silently with /RELAUNCH=window or /RELAUNCH=background to reopen the app afterwards.
+Filename: "{app}\{#AppExe}"; Parameters: "{code:RelaunchArgs}"; Flags: nowait; Check: RelaunchRequested
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM {#AppExe}"; Flags: runhidden; RunOnceId: "KillApp"
 
 [Code]
+var
+  Upgrading: Boolean;
+
+function InitializeSetup: Boolean;
+begin
+  // Decided before anything is installed, since this install registers itself later on.
+  Upgrading := RegValueExists(HKEY_CURRENT_USER,
+    ExpandConstant('Software\Microsoft\Windows\CurrentVersion\Uninstall\{#emit SetupSetting("AppId")}_is1'), 'UninstallString');
+  Result := True;
+end;
+
+function IsUpgrade: Boolean;
+begin
+  Result := Upgrading;
+end;
+
+function IsMissing(Path: String): Boolean;
+begin
+  Result := not FileExists(ExpandConstant(Path));
+end;
+
+function RelaunchRequested: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|}') <> '';
+end;
+
+function RelaunchArgs(Param: String): String;
+begin
+  if ExpandConstant('{param:RELAUNCH|}') = 'background' then
+    Result := '--background --updated'
+  else
+    Result := '--updated';
+end;
+
 // Close a running copy from before a rename so its folder can be removed.
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var

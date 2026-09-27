@@ -1,4 +1,4 @@
-<Page
+﻿<Page
     x:Class="BetterSTT.UI.DictionaryPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -41,5 +41,31 @@
         </Grid>
         <StackPanel x:Name="List" />
         <TextBlock x:Name="EmptyText" Margin="4,4,0,0" Style="{StaticResource Caption}" Text="No word fixes yet." />
+
+        <Grid Margin="0,28,0,8">
+            <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="Snippets" />
+            <TextBlock x:Name="SnippetCountText" HorizontalAlignment="Right" Style="{StaticResource Caption}" />
+        </Grid>
+        <Border Padding="24,18" Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="Add a snippet" />
+                <TextBlock Margin="0,2,0,14" Style="{StaticResource Caption}" Text="Say the trigger on its own, as a whole dictation, and BetterSTT types the saved text instead. The text can have several lines, like an address or a signature." />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="3*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBox x:Name="TriggerBox" VerticalAlignment="Top" AutomationProperties.Name="Snippet trigger" PlaceholderText="When I say, e.g. my email" />
+                    <ui:SymbolIcon Grid.Column="1" Margin="12,8,12,0" VerticalAlignment="Top" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Symbol="ArrowRight24" />
+                    <ui:TextBox x:Name="SnippetTextBox" Grid.Column="2" MinLines="2" AcceptsReturn="True" TextWrapping="Wrap" AutomationProperties.Name="Snippet text" PlaceholderText="Type this, e.g. sam@example.com" />
+                    <ui:Button Grid.Column="3" Margin="12,0,0,0" VerticalAlignment="Top" Appearance="Primary" Click="OnAddSnippet" Content="Add" Icon="{ui:SymbolIcon Add24}" AutomationProperties.Name="Add snippet" />
+                </Grid>
+                <TextBlock x:Name="SnippetError" Margin="0,8,0,0" Foreground="{DynamicResource SystemFillColorCriticalBrush}" Style="{StaticResource Caption}" Visibility="Collapsed" />
+            </StackPanel>
+        </Border>
+        <StackPanel x:Name="SnippetList" />
+        <TextBlock x:Name="SnippetEmptyText" Margin="4,4,0,0" Style="{StaticResource Caption}" Text="No snippets yet." />
     </StackPanel>
 </Page>
