@@ -4,7 +4,7 @@ BetterSTT does not collect, send or share any personal data.
 
 **What stays on your PC.** Your voice is recorded only while dictation is on, and it's transcribed on your own computer. Audio is never sent anywhere. The following are stored only in `%LOCALAPPDATA%\BetterSTT`:
 - your settings
-- your recent dictations and the name of the app each went into (e.g. "Discord"). Home keeps the last three by default; you can choose 5, 10, 15 or all of them, and clear them at any time.
+- your recent dictations and the name of the app each went into (e.g. "Discord"). Home keeps the last three by default; you can choose 5, 10, 15 or all of them, and clear them at any time. Private mode stops new dictations from being kept at all; only the totals (number of dictations and words removed) are updated.
 - your word fixes, snippets and per-app rules
 - a log of timings, word counts and outcomes (such as "cancelled"), which never contains what you said
 - the recording of a dictation in progress, in the `pending` folder, so it survives a crash. It's deleted as soon as the dictation is transcribed or cancelled. If transcription fails, it's kept until you retry or discard it from the Home page.
@@ -17,5 +17,7 @@ BetterSTT does not collect, send or share any personal data.
 There are no analytics and no telemetry.
 
 **Diagnostics.** The **Save diagnostics** button writes a .zip file to a folder you choose. It isn't sent anywhere; you decide whether to share it. It contains the log, your app, Windows and GPU details, and your settings with your vocabulary, word fixes and snippets replaced by "(hidden)". Your Windows user name is removed from file paths. It never contains anything you dictated.
+
+**Exporting your dictionary.** Export on the Dictionary page writes your word fixes, snippets and vocabulary to a file you choose. It isn't sent anywhere.
 
 **Uninstalling.** The uninstaller offers to delete everything in `%LOCALAPPDATA%\BetterSTT`.

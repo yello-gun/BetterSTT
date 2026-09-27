@@ -109,6 +109,9 @@ public partial class AppsPage : Page
         options.Children.Add(Option("Language you speak", ["Usual", .. languages.Select(l => l.Name)],
             Math.Max(0, languageIndex),
             i => Edit(p => p.Language = i == 0 ? null : languages[i - 1].Code)));
+        options.Children.Add(Option("Line breaks", ["Keep", "Turn into spaces"],
+            profile.JoinLines == true ? 1 : 0,
+            i => Edit(p => p.JoinLines = i == 1 ? true : null)));
         options.Children.Add(Option("Listening indicator", ["Usual", "Show", "Hide"],
             profile.ShowOverlay switch { null => 0, true => 1, false => 2 },
             i => Edit(p => p.ShowOverlay = i switch { 1 => true, 2 => false, _ => null })));

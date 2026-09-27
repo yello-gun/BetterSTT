@@ -82,6 +82,60 @@ public partial class DictionaryPage : Page
         return null;
     }
 
+    void OnExport(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = "BetterSTT-dictionary.json",
+            Filter = "BetterSTT dictionary|*.json",
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        };
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
+        try
+        {
+            File.WriteAllText(dialog.FileName, DictionaryTransfer.Export(_c.Settings));
+            ShowTransfer($"Saved {Path.GetFileName(dialog.FileName)}.", error: false);
+        }
+        catch (Exception ex)
+        {
+            ShowTransfer($"Couldn't save it: {ex.Message}", error: true);
+        }
+    }
+
+    void OnImport(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "Dictionary or list|*.json;*.csv;*.txt|All files|*.*",
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        };
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
+        try
+        {
+            string text = File.ReadAllText(dialog.FileName);
+            var copy = _c.Settings.Clone();
+            var result = DictionaryTransfer.Import(text, copy); // checked on a copy first, so a bad file changes nothing
+            _c.Update(s => DictionaryTransfer.Import(text, s));
+            ShowTransfer($"Imported {result}.", error: false);
+            _loading = true;
+            VocabularyBox.Text = _c.Settings.Vocabulary;
+            _loading = false;
+            Refresh();
+            RefreshSnippets();
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException or InvalidOperationException)
+        {
+            ShowTransfer($"Couldn't import it: {ex.Message}", error: true);
+        }
+    }
+
+    void ShowTransfer(string message, bool error)
+    {
+        TransferText.Text = message;
+        TransferText.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, error ? Theme.Critical : Theme.TextSecondary);
+        TransferText.Visibility = Visibility.Visible;
+    }
+
     void OnAddSnippet(object sender, RoutedEventArgs e)
     {
         string trigger = TriggerBox.Text.Trim(), text = SnippetTextBox.Text.Trim();

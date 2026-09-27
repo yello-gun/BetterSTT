@@ -55,6 +55,7 @@ public partial class App : Application
 
         _overlay = new OverlayWindow(_controller);
         _tray = new TrayIcon(_controller, ShowMainWindow, ExitApp);
+        _controller.AddWordRequested += selected => new AddWordWindow(selected).Show();
         _controller.Start(checkForUpdates: !TextInjector.ClipboardOnly);
         ListenForSignals();
         if (!_background) ShowMainWindow();

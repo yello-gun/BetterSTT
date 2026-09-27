@@ -67,6 +67,24 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Body}" Text="Add a word to the dictionary" />
+                    <TextBlock x:Name="AddWordHint" Margin="0,2,0,0" Style="{StaticResource Caption}" />
+                </StackPanel>
+                <ContentControl x:Name="AddWordKeys" Grid.Column="1" Margin="16,0" VerticalAlignment="Center" />
+                <ui:Button x:Name="AddWordChangeButton" Grid.Column="2" MinWidth="90" Margin="0,0,16,0" Click="OnChangeAddWord" Content="Change" />
+                <ui:ToggleSwitch x:Name="AddWordSwitch" Grid.Column="3" VerticalAlignment="Center" AutomationProperties.Name="Add a word shortcut" />
+            </Grid>
+        </Border>
+
+        <Border Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Style="{StaticResource Body}" Text="Keep listening after you stop" />
@@ -152,10 +170,16 @@
                         <ui:ToggleSwitch x:Name="LivePreviewSwitch" Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center" AutomationProperties.Name="Show words as you speak" />
                     </Grid>
                     <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
-                        <TextBlock Margin="0,0,10,0" VerticalAlignment="Center" Style="{StaticResource Caption}" Text="Position" />
+                        <TextBlock Width="52" Margin="0,0,10,0" VerticalAlignment="Center" Style="{StaticResource Caption}" Text="Position" />
                         <ComboBox x:Name="PositionBox" MinWidth="150" Margin="0,0,8,0" AutomationProperties.Name="Indicator position" />
                         <ComboBox x:Name="ScreenBox" MinWidth="170" Margin="0,0,8,0" AutomationProperties.Name="Indicator screen" />
                         <ui:Button Click="OnPreviewOverlay" Content="Preview" Icon="{ui:SymbolIcon Eye24}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
+                        <TextBlock Width="52" Margin="0,0,10,0" VerticalAlignment="Center" Style="{StaticResource Caption}" Text="Size" />
+                        <ComboBox x:Name="SizeBox" MinWidth="150" Margin="0,0,8,0" AutomationProperties.Name="Indicator size" />
+                        <TextBlock Margin="8,0,10,0" VerticalAlignment="Center" Style="{StaticResource Caption}" Text="Opacity" />
+                        <ComboBox x:Name="OpacityBox" MinWidth="120" AutomationProperties.Name="Indicator opacity" />
                     </StackPanel>
                 </StackPanel>
             </StackPanel>

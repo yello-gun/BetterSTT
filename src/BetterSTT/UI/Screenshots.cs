@@ -61,6 +61,15 @@ static class Screenshots
                 window.Close();
             }
 
+            // The add-a-word window, as opened by its shortcut with "git hub" selected.
+            ApplicationThemeManager.Apply(ApplicationTheme.Light, WindowBackdropType.None, updateAccent: false);
+            Theme.ApplyAccent();
+            var addWord = new AddWordWindow("git hub") { WindowBackdropType = WindowBackdropType.None, ShowActivated = false, Topmost = false };
+            addWord.Show();
+            await Task.Delay(700);
+            Save(addWord, Path.Combine(dir, "add-word-light.png"));
+            addWord.Close();
+
             foreach (bool dark in new[] { false, true })
                 foreach (string state in new[] { "listening", "busy", "done" })
                 {

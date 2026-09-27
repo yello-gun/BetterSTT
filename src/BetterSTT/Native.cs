@@ -203,6 +203,44 @@ public static class TextInjector
         }
     }
 
+    /// <summary>
+    /// Copies the selection in the focused app (with Ctrl+C) and returns it, then puts the clipboard back.
+    /// Null when nothing was selected or it's too long to be a word or name. In test runs (--no-paste) no
+    /// keys are sent; the clipboard's current text is used instead.
+    /// </summary>
+    public static async Task<string?> CopySelectionAsync()
+    {
+        string? text = null;
+        if (ClipboardOnly)
+        {
+            try { text = WinForms.Clipboard.GetText(); } catch { /* clipboard busy */ }
+        }
+        else
+        {
+            await WaitForModifiersReleasedAsync();
+            var backup = SnapshotClipboard();
+            uint before = GetClipboardSequenceNumber();
+            SendKeyCombo(VK_CONTROL, VK_C);
+            for (int waited = 0; waited < 600; waited += 25)
+            {
+                await Task.Delay(25);
+                if (GetClipboardSequenceNumber() == before) continue;
+                await Task.Delay(30);
+                try { if (WinForms.Clipboard.ContainsText()) text = WinForms.Clipboard.GetText(); } catch { /* clipboard busy */ }
+                break;
+            }
+            if (backup != null)
+            {
+                try { WinForms.Clipboard.SetDataObject(backup, true, 10, 50); } catch { /* leave the copied text */ }
+            }
+        }
+        text = text?.Trim();
+        return string.IsNullOrEmpty(text) || text.Length > 80 || text.Contains('\n') ? null : text;
+    }
+
+    [DllImport("user32.dll")]
+    static extern uint GetClipboardSequenceNumber();
+
     /// <summary>Copies text, keeping it out of Windows clipboard history (Win+V) and cloud clipboard.</summary>
     public static void SetClipboard(string text)
     {
@@ -381,7 +419,7 @@ public static class TextInjector
     };
 
     const uint INPUT_KEYBOARD = 1, KEYEVENTF_KEYUP = 0x2, KEYEVENTF_UNICODE = 0x4;
-    const ushort VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C, VK_V = 0x56, VK_RETURN = 0x0D;
+    const ushort VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C, VK_V = 0x56, VK_C = 0x43, VK_RETURN = 0x0D;
 
     [StructLayout(LayoutKind.Sequential)]
     struct INPUT { public uint type; public InputUnion U; }

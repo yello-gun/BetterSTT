@@ -278,6 +278,9 @@ public partial class OverlayWindow : Window
     /// <summary>Shows the pill at the configured edge of the chosen screen (the window's margin holds its shadow).</summary>
     void ShowAtBottom()
     {
+        double scale = _c.Settings.OverlaySize switch { OverlaySize.Small => 0.85, OverlaySize.Large => 1.2, _ => 1.0 };
+        Pill.LayoutTransform = scale == 1.0 ? Transform.Identity : new ScaleTransform(scale, scale);
+        Opacity = Math.Clamp(_c.Settings.OverlayOpacity, 30, 100) / 100.0;
         if (!IsVisible) Show();
         UpdateLayout();
         var screen = _c.Settings.OverlayOnPrimaryScreen

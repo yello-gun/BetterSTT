@@ -5,7 +5,14 @@
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     Title="Dictionary">
     <StackPanel Margin="24,8,40,32">
-        <TextBlock Style="{StaticResource PageTitle}" Text="Dictionary" />
+        <Grid>
+            <TextBlock Style="{StaticResource PageTitle}" Text="Dictionary" />
+            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Orientation="Horizontal">
+                <ui:Button Click="OnImport" Content="Import…" Icon="{ui:SymbolIcon ArrowImport24}" ToolTip="Add word fixes, snippets and words from a file exported by BetterSTT, or from a list with one fix per line (git hub, GitHub)" />
+                <ui:Button Margin="8,0,0,0" Click="OnExport" Content="Export…" Icon="{ui:SymbolIcon ArrowExportLtr24}" ToolTip="Save your word fixes, snippets and words to a file, to back them up or share them" />
+            </StackPanel>
+        </Grid>
+        <TextBlock x:Name="TransferText" Margin="0,-12,0,12" Style="{StaticResource Caption}" Visibility="Collapsed" />
 
         <Border Padding="24,18" Style="{StaticResource Card}">
             <StackPanel>

@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Text.RegularExpressions;
+using System.Diagnostics;
 using System.Net.Http;
 using System.Windows.Threading;
 using WinFormsKeys = System.Windows.Forms.Keys;
@@ -27,7 +28,7 @@ public enum OutcomeKind
 
 public sealed record DictationOutcome(OutcomeKind Kind, RecentDictation? Item = null, string? Error = null);
 
-public enum HotkeyTarget { Dictate, PasteLast }
+public enum HotkeyTarget { Dictate, PasteLast, AddWord }
 
 /// <summary>
 /// Owns the dictation pipeline (hotkey → record → transcribe → clean → paste) and the settings.
@@ -35,7 +36,7 @@ public enum HotkeyTarget { Dictate, PasteLast }
 /// </summary>
 public sealed class DictationController : IDisposable
 {
-    const int DictateHotkeyId = 1, PasteLastHotkeyId = 2, CancelHotkeyId = 3;
+    const int DictateHotkeyId = 1, PasteLastHotkeyId = 2, CancelHotkeyId = 3, AddWordHotkeyId = 4;
     static readonly HotkeyBinding EscapeKey = new() { Key = WinFormsKeys.Escape, Ctrl = false, Alt = false };
 
     readonly Dispatcher _ui = Dispatcher.CurrentDispatcher;
@@ -122,6 +123,14 @@ public sealed class DictationController : IDisposable
     public string RuntimeName => _transcriber.RuntimeName;
     public bool HotkeyRegistered { get; private set; }
     public bool PasteLastRegistered { get; private set; }
+    public bool AddWordRegistered { get; private set; }
+
+    /// <summary>The add-a-word shortcut was pressed; carries the text that was selected (null if nothing was).</summary>
+    public event Action<string?>? AddWordRequested;
+
+    /// <summary>The most recent dictation, including one made in private mode (which isn't in <see cref="History"/>).</summary>
+    public RecentDictation? LastDictation => _lastPrivate ?? History.Recent.FirstOrDefault();
+    RecentDictation? _lastPrivate;
     public TimeSpan Elapsed => State == DictationState.Recording ? DateTime.Now - _recordingStarted : TimeSpan.Zero;
     public double LastAudioSeconds { get; private set; }
     public double LastTranscribeSeconds { get; private set; }
@@ -195,6 +204,9 @@ public sealed class DictationController : IDisposable
                     Toggle();
                 }
                 break;
+            case AddWordHotkeyId:
+                _ = RequestAddWordAsync();
+                break;
             case PasteLastHotkeyId:
                 _ = PasteLastAsync();
                 break;
@@ -208,7 +220,7 @@ public sealed class DictationController : IDisposable
     {
         if (_hotkeySuspensions > 0)
         {
-            HotkeyRegistered = PasteLastRegistered = false;
+            HotkeyRegistered = PasteLastRegistered = AddWordRegistered = false;
             return;
         }
 
@@ -220,6 +232,11 @@ public sealed class DictationController : IDisposable
         PasteLastRegistered = Settings.PasteLastEnabled && _hotkey.Register(PasteLastHotkeyId, Settings.PasteLastHotkey);
         if (Settings.PasteLastEnabled && !PasteLastRegistered && announceConflict)
             Notice?.Invoke($"{Settings.PasteLastHotkey} (paste last dictation) is already used by another app.", true);
+
+        _hotkey.Unregister(AddWordHotkeyId);
+        AddWordRegistered = Settings.AddWordEnabled && _hotkey.Register(AddWordHotkeyId, Settings.AddWordHotkey);
+        if (Settings.AddWordEnabled && !AddWordRegistered && announceConflict)
+            Notice?.Invoke($"{Settings.AddWordHotkey} (add a word to the dictionary) is already used by another app.", true);
     }
 
     /// <summary>Temporarily frees the hotkeys, only while a new shortcut is being recorded.</summary>
@@ -228,7 +245,8 @@ public sealed class DictationController : IDisposable
         _hotkeySuspensions++;
         _hotkey.Unregister(DictateHotkeyId);
         _hotkey.Unregister(PasteLastHotkeyId);
-        HotkeyRegistered = PasteLastRegistered = false;
+        _hotkey.Unregister(AddWordHotkeyId);
+        HotkeyRegistered = PasteLastRegistered = AddWordRegistered = false;
     }
 
     public void ResumeHotkey()
@@ -241,10 +259,15 @@ public sealed class DictationController : IDisposable
     /// <summary>Saves a new shortcut. Returns null on success, otherwise why it can't be used.</summary>
     public string? TrySetHotkey(HotkeyTarget target, HotkeyBinding binding)
     {
-        var other = target == HotkeyTarget.Dictate ? Settings.PasteLastHotkey : Settings.Hotkey;
-        bool otherInUse = target == HotkeyTarget.Dictate ? Settings.PasteLastEnabled : true;
-        if (otherInUse && binding.SameAs(other))
-            return $"{binding} is already your {(target == HotkeyTarget.Dictate ? "paste-last" : "dictation")} shortcut.";
+        (HotkeyTarget Target, HotkeyBinding Binding, bool InUse, string Name)[] others =
+        [
+            (HotkeyTarget.Dictate, Settings.Hotkey, true, "dictation"),
+            (HotkeyTarget.PasteLast, Settings.PasteLastHotkey, Settings.PasteLastEnabled, "paste-last"),
+            (HotkeyTarget.AddWord, Settings.AddWordHotkey, Settings.AddWordEnabled, "add-a-word"),
+        ];
+        foreach (var o in others)
+            if (o.Target != target && o.InUse && binding.SameAs(o.Binding))
+                return $"{binding} is already your {o.Name} shortcut.";
         if (binding.Key == WinFormsKeys.Escape && !binding.Ctrl && !binding.Alt && !binding.Shift && !binding.Win)
             return "Esc is reserved for cancelling a dictation.";
         if (binding.Key == WinFormsKeys.MButton && !binding.Ctrl && !binding.Alt && !binding.Shift && !binding.Win)
@@ -254,8 +277,12 @@ public sealed class DictationController : IDisposable
 
         Update(s =>
         {
-            if (target == HotkeyTarget.Dictate) s.Hotkey = binding;
-            else s.PasteLastHotkey = binding;
+            switch (target)
+            {
+                case HotkeyTarget.Dictate: s.Hotkey = binding; break;
+                case HotkeyTarget.PasteLast: s.PasteLastHotkey = binding; break;
+                default: s.AddWordHotkey = binding; break;
+            }
         });
         return null;
     }
@@ -276,7 +303,9 @@ public sealed class DictationController : IDisposable
         }
         if (!before.Hotkey.SameAs(Settings.Hotkey)
             || !before.PasteLastHotkey.SameAs(Settings.PasteLastHotkey)
-            || before.PasteLastEnabled != Settings.PasteLastEnabled)
+            || before.PasteLastEnabled != Settings.PasteLastEnabled
+            || !before.AddWordHotkey.SameAs(Settings.AddWordHotkey)
+            || before.AddWordEnabled != Settings.AddWordEnabled)
         {
             RegisterHotkeys(announceConflict: true);
         }
@@ -530,7 +559,7 @@ public sealed class DictationController : IDisposable
         string clean = TextCleaner.Process(raw, settings);
         if (clean.Length == 0) return new DictationOutcome(OutcomeKind.Empty);
 
-        var item = History.Add(raw, clean, _target, Settings.RecentLimit);
+        var item = Remember(raw, clean, _target, settings);
         Log.Write($"Dictation: {LastAudioSeconds:F1} s audio, {LastTranscribeSeconds:F2} s to transcribe, {item.WordsRemoved} words removed");
 
         var kind = await DeliverAsync(settings.AddTrailingSpace ? clean + " " : clean, clean, settings);
@@ -611,8 +640,23 @@ public sealed class DictationController : IDisposable
     }
 
     /// <summary>Types or pastes the text, falling back to the clipboard where typing can't reach.</summary>
+    /// <summary>Adds a dictation to history, or in private mode only to the totals (kept in memory for paste-last).</summary>
+    RecentDictation Remember(string raw, string clean, AppInfo? app, AppSettings settings)
+    {
+        string? language = settings.Language == "auto" ? _transcriber.LastLanguage : null;
+        if (Settings.PrivateMode) return _lastPrivate = History.CountOnly(raw, clean, app, language);
+        _lastPrivate = null;
+        return History.Add(raw, clean, app, Settings.RecentLimit, language);
+    }
+
     async Task<OutcomeKind> DeliverAsync(string text, string clipboardText, AppSettings settings)
     {
+        if (settings.JoinLines)
+        {
+            // Terminals can run each line of a multi-line paste as its own command.
+            text = Regex.Replace(text, @"[ \t]*(?:\r?\n)+[ \t]*", " ");
+            clipboardText = Regex.Replace(clipboardText, @"[ \t]*(?:\r?\n)+[ \t]*", " ");
+        }
         // Started from BetterSTT's own window (or it has focus): there is nothing to paste into.
         // Test runs (--no-paste) never type into other windows either.
         if (TextInjector.ClipboardOnly || TextInjector.IsOwnWindowFocused())
@@ -630,6 +674,18 @@ public sealed class DictationController : IDisposable
         await TextInjector.InjectAsync(text, settings);
         return OutcomeKind.Pasted;
     }
+
+    // ---- add a word ----
+
+    /// <summary>Copies what's selected in the focused app and asks the UI to offer adding it to the dictionary.</summary>
+    async Task RequestAddWordAsync()
+    {
+        string? selected = TextInjector.IsOwnWindowFocused() ? null : await TextInjector.CopySelectionAsync();
+        AddWordRequested?.Invoke(selected);
+    }
+
+    /// <summary>Private mode on or off: while on, new dictations aren't kept in the recent list.</summary>
+    public void SetPrivateMode(bool on) => Update(s => s.PrivateMode = on);
 
     /// <summary>Makes a style the usual one.</summary>
     public void SetStyle(string name) => Update(s => s.Style = name);
@@ -737,7 +793,7 @@ public sealed class DictationController : IDisposable
 
     public async Task PasteLastAsync()
     {
-        var last = History.Recent.FirstOrDefault();
+        var last = LastDictation;
         if (State != DictationState.Idle || last == null)
         {
             Sounds.Error();
@@ -779,7 +835,7 @@ public sealed class DictationController : IDisposable
             }
             else
             {
-                var item = History.Add(result.Value.Raw, result.Value.Clean, null, Settings.RecentLimit);
+                var item = Remember(result.Value.Raw, result.Value.Clean, null, ActiveSettings);
                 TextInjector.SetClipboard(result.Value.Clean);
                 outcome = new DictationOutcome(OutcomeKind.Recovered, item);
             }

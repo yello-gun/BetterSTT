@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Media;
 using System.Runtime.InteropServices;
@@ -94,7 +94,7 @@ public sealed class TrayIcon : IDisposable
 {
     readonly DictationController _controller;
     readonly WinForms.NotifyIcon _icon;
-    readonly WinForms.ToolStripMenuItem _toggle, _copyLast, _cleanup;
+    readonly WinForms.ToolStripMenuItem _toggle, _copyLast, _cleanup, _private;
 
     public TrayIcon(DictationController controller, Action openWindow, Action exit)
     {
@@ -102,11 +102,13 @@ public sealed class TrayIcon : IDisposable
         _toggle = new WinForms.ToolStripMenuItem("", null, (_, _) => controller.Toggle());
         _copyLast = new WinForms.ToolStripMenuItem("Copy last dictation", null, (_, _) =>
         {
-            var last = controller.History.Recent.FirstOrDefault();
+            var last = controller.LastDictation;
             if (last != null) TextInjector.SetClipboard(last.Clean);
         });
         // Filled with one checkable item per writing style each time the menu opens.
         _cleanup = new WinForms.ToolStripMenuItem("Writing style");
+        _private = new WinForms.ToolStripMenuItem("Private mode (don't keep dictations)", null,
+            (_, _) => controller.SetPrivateMode(!controller.Settings.PrivateMode));
         var menu = new WinForms.ContextMenuStrip();
         menu.Items.AddRange(
         [
@@ -115,6 +117,7 @@ public sealed class TrayIcon : IDisposable
             _copyLast,
             new WinForms.ToolStripSeparator(),
             _cleanup,
+            _private,
             new WinForms.ToolStripSeparator(),
             new WinForms.ToolStripMenuItem("Exit", null, (_, _) => exit()),
         ]);
@@ -144,7 +147,8 @@ public sealed class TrayIcon : IDisposable
         _icon.Text = text.Length <= 127 ? text : text[..127];
         _toggle.Text = (c.State == DictationState.Recording ? "Stop dictation" : "Start dictation") + $"\t{c.Settings.Hotkey}";
         _toggle.Enabled = c.State != DictationState.Transcribing;
-        _copyLast.Enabled = c.History.Recent.Count > 0;
+        _copyLast.Enabled = c.LastDictation != null;
+        _private.Checked = c.Settings.PrivateMode;
         _cleanup.DropDownItems.Clear();
         foreach (var style in c.Settings.Styles)
         {

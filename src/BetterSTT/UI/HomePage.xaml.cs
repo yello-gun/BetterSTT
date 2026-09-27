@@ -22,6 +22,7 @@ public partial class HomePage : Page
     public HomePage()
     {
         InitializeComponent();
+        SearchBox.TextChanged += (_, _) => RefreshRecent();
         foreach (int n in AppSettings.RecentLimits) RecentLimitBox.Items.Add(n == 0 ? "All" : $"Last {n}");
         RecentLimitBox.SelectionChanged += (_, _) =>
         {
@@ -217,6 +218,20 @@ public partial class HomePage : Page
         Chips.Children.Add(styleLabel);
         Chips.Children.Add(styleBox);
 
+        // Private mode: dictations still work, but aren't kept in the list below.
+        var privateSwitch = new ToggleSwitch
+        {
+            Content = "Private",
+            IsChecked = _c.Settings.PrivateMode,
+            Margin = new Thickness(16, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "While on, new dictations aren't kept in your recent dictations. Paste last still works until you close BetterSTT.",
+        };
+        System.Windows.Automation.AutomationProperties.SetName(privateSwitch, "Private mode");
+        privateSwitch.Checked += (_, _) => { if (!_c.Settings.PrivateMode) _c.SetPrivateMode(true); };
+        privateSwitch.Unchecked += (_, _) => { if (_c.Settings.PrivateMode) _c.SetPrivateMode(false); };
+        Chips.Children.Add(privateSwitch);
+
         ActionButton.Content = _c.State switch
         {
             DictationState.Recording => "Stop",
@@ -257,15 +272,29 @@ public partial class HomePage : Page
 
         RecentList.Children.Clear();
         var recent = _c.History.Recent;
-        RecentEmpty.Text = limit == 0
-            ? "Your dictations will appear here."
-            : $"Your last {limit} dictations will appear here.";
-        RecentEmpty.Visibility = recent.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        RecentEmpty.Text = _c.Settings.PrivateMode
+            ? "Private mode is on, so new dictations aren't kept here."
+            : limit == 0
+                ? "Your dictations will appear here."
+                : $"Your last {limit} dictations will appear here.";
         ClearButton.Visibility = recent.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-        int shown = _showAll ? recent.Count : Math.Min(recent.Count, ShownAtFirst);
-        for (int i = 0; i < shown; i++) RecentList.Children.Add(RecentCard(recent[i], i));
+
+        // Search appears once there's more than a screenful.
+        SearchBox.Visibility = recent.Count > 3 ? Visibility.Visible : Visibility.Collapsed;
+        string query = recent.Count > 3 ? SearchBox.Text.Trim() : "";
+        var matches = Enumerable.Range(0, recent.Count)
+            .Where(i => query.Length == 0
+                        || recent[i].Clean.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+                        || recent[i].Raw.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+                        || (recent[i].AppName?.Contains(query, StringComparison.CurrentCultureIgnoreCase) ?? false))
+            .ToList();
+        RecentEmpty.Visibility = recent.Count == 0 || matches.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (recent.Count > 0 && matches.Count == 0) RecentEmpty.Text = $"No dictations contain “{query}”.";
+
+        int shown = _showAll || query.Length > 0 ? matches.Count : Math.Min(matches.Count, ShownAtFirst);
+        foreach (int i in matches.Take(shown)) RecentList.Children.Add(RecentCard(recent[i], i));
         ShowAllButton.Content = $"Show all {recent.Count} dictations";
-        ShowAllButton.Visibility = shown < recent.Count ? Visibility.Visible : Visibility.Collapsed;
+        ShowAllButton.Visibility = shown < matches.Count ? Visibility.Visible : Visibility.Collapsed;
     }
 
     void OnShowAll(object sender, RoutedEventArgs e)
@@ -280,7 +309,8 @@ public partial class HomePage : Page
 
         var text = Theme.Text(item.Clean);
         string removed = item.WordsRemoved == 1 ? "1 word removed" : $"{item.WordsRemoved} words removed";
-        string where = item.AppName != null ? $" · in {item.AppName}" : "";
+        string where = (item.AppName != null ? $" · in {item.AppName}" : "")
+                       + (AppSettings.LanguageName(item.Language) is { } language ? $" · {language}" : "");
         var meta = Theme.Text($"{Theme.TimeAgo(item.Time)}{where} · {removed}", 12, Theme.TextSecondary);
         meta.Margin = new Thickness(0, 4, 0, 0);
         var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center };

@@ -63,16 +63,21 @@ A writing style decides how much BetterSTT changes what you said. You can switch
 - Natural removes fillers, pauses and stutters and keeps the rest of your wording.
 - Formal does everything Natural does, drops vague endings like "or something," and splits longer text into paragraphs. A new paragraph starts when you change topic ("Also," "Next," "Finally"), after a greeting like "Hi Sarah," before a sign-off like "Thanks," and when a paragraph gets long.
 - Math writes spoken math as symbols, so "x squared plus one over two" becomes x² + 1/2. It can write LaTeX instead.
+- Code is for code editors and terminals. "Camel case user name" becomes userName, with pascal, snake, kebab and constant case too, and "dot," "underscore," "slash," "equals" and brackets become symbols. It only converts what you say and never adds code of its own.
 
 Every style except Exact words also understands "new line" and "new paragraph" when you say them as their own phrase. A style can also turn spoken punctuation into marks, so "comma," "period" and "question mark" type the symbols.
 
 ## Making it fit how you work
 
-Word fixes correct words BetterSTT keeps getting wrong. If it writes "git hub," click that word in a recent dictation on the Home page and type "GitHub." The fix applies from then on, and the word is also given to the speech model as a hint so it hears it right more often.
+Word fixes correct words BetterSTT keeps getting wrong. The fastest way to add one is to select the word in any app and press Ctrl + Alt + D, which opens a small window where you can have BetterSTT learn the spelling or always replace it with the right one. If it writes "git hub," click that word in a recent dictation on the Home page and type "GitHub." The fix applies from then on, and the word is also given to the speech model as a hint so it hears it right more often.
 
 Snippets type saved text when you say a trigger phrase on its own. Saying "my email" can type your email address, and a snippet can be several lines long, like a signature.
 
-Per-app rules change settings for one app only. Examples are Exact words in a code editor, Formal in Outlook, no extra space in a terminal, typing instead of pasting in apps that block paste, hiding the indicator in games, or Spanish in WhatsApp and English everywhere else.
+The Dictionary page can export your word fixes, snippets and vocabulary to a file and import them again, which is useful for a backup or for sharing them with someone else. It also imports a plain list of fixes with one per line, like "git hub, GitHub."
+
+Per-app rules change settings for one app only. Examples are Exact words in a code editor, Formal in Outlook, no extra space in a terminal, typing instead of pasting in apps that block paste, hiding the indicator in games, Spanish in WhatsApp and English everywhere else, or turning line breaks into spaces in a terminal so a multi-line dictation can't run as several commands.
+
+<img src="docs/screenshots/add-word-light.png" alt="Add to dictionary window" width="440">
 
 ![Dictionary page](docs/screenshots/dictionary-dark.png)
 
@@ -88,14 +93,15 @@ Per-app rules change settings for one app only. Examples are Exact words in a co
 - Home keeps your recent dictations so you can copy them again or fix a word. It keeps the last three by default, and you can choose 5, 10, 15 or all of them.
 - Ctrl + Alt + Shift + V types your last dictation again, which helps when it went into the wrong window.
 - Windows blocks apps from typing into programs that run as administrator. BetterSTT notices this and puts the text on your clipboard so it isn't lost.
-- A small indicator shows while you speak, with a live draft of your words. You can move it to any corner or edge of the screen.
+- A small indicator shows while you speak, with a live draft of your words. You can move it to any corner or edge of the screen and change its size and opacity.
+- When the language is set to detect automatically, each recent dictation shows which language BetterSTT heard.
 - The speech model can be unloaded after a set idle time to free memory. It loads again when you start dictating.
 
 ## Privacy
 
 Speech recognition runs on your own PC with [Whisper](https://github.com/openai/whisper) through [Whisper.net](https://github.com/sandrohanea/whisper.net). Your audio and text never leave your computer. BetterSTT connects to the internet for two things only, which are the one-time speech model download from Hugging Face and the daily update check on GitHub. Neither request contains anything about you or what you said, and the update check can be turned off. The [privacy policy](PRIVACY.md) has the details.
 
-Your settings, your recent dictations, a log and your speech models are stored in `%LOCALAPPDATA%\BetterSTT`. Home keeps the last three dictations by default, and you can change that to 5, 10, 15 or all of them. The log records timings and outcomes and never records what you said.
+Your settings, your recent dictations, a log and your speech models are stored in `%LOCALAPPDATA%\BetterSTT`. Private mode, on the Home page or in the tray menu, stops new dictations from being kept in the recent list, and Home has a search box once the list gets longer. Home keeps the last three dictations by default, and you can change that to 5, 10, 15 or all of them. The log records timings and outcomes and never records what you said.
 
 ![Speech page](docs/screenshots/speech-light.png)
 

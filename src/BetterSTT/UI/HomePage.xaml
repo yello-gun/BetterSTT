@@ -90,6 +90,7 @@
             </StackPanel>
             <ui:Button x:Name="ClearButton" Grid.Column="2" Appearance="Transparent" Click="OnClear" Content="Clear" />
         </Grid>
+        <ui:TextBox x:Name="SearchBox" Margin="0,0,0,8" AutomationProperties.Name="Search dictations" Icon="{ui:SymbolIcon Search24}" PlaceholderText="Search your dictations" Visibility="Collapsed" />
         <StackPanel x:Name="RecentList" />
         <ui:Button x:Name="ShowAllButton" Margin="0,4,0,0" HorizontalAlignment="Center" Appearance="Transparent" Click="OnShowAll" Visibility="Collapsed" />
         <TextBlock x:Name="RecentEmpty" Margin="4,4,0,0" Style="{StaticResource Caption}" />

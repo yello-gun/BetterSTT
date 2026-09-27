@@ -12,6 +12,8 @@ public sealed class RecentDictation
     /// <summary>Where it was dictated into (null when unknown, e.g. a recovered recording).</summary>
     public string? AppProcess { get; set; }
     public string? AppName { get; set; }
+    /// <summary>The language the model detected, when it was set to detect automatically.</summary>
+    public string? Language { get; set; }
 }
 
 /// <summary>Lifetime stats plus the last few dictations, stored locally in history.json.</summary>
@@ -64,10 +66,11 @@ public sealed class HistoryStore
     }
 
     /// <param name="limit">How many recent dictations to keep; 0 keeps them all.</param>
-    public RecentDictation Add(string raw, string clean, AppInfo? app, int limit)
+    public RecentDictation Add(string raw, string clean, AppInfo? app, int limit, string? language = null)
     {
         var item = new RecentDictation
         {
+            Language = language,
             Time = DateTime.Now,
             Raw = raw,
             Clean = clean,
@@ -94,6 +97,25 @@ public sealed class HistoryStore
         if (limit <= 0 || Recent.Count <= limit) return false;
         Recent.RemoveRange(limit, Recent.Count - limit);
         return true;
+    }
+
+    /// <summary>Private mode: counts a dictation in the totals without keeping its text.</summary>
+    public RecentDictation CountOnly(string raw, string clean, AppInfo? app = null, string? language = null)
+    {
+        var item = new RecentDictation
+        {
+            Language = language,
+            Time = DateTime.Now,
+            Raw = raw,
+            Clean = clean,
+            AppProcess = app?.ProcessName,
+            AppName = app?.DisplayName,
+            WordsRemoved = Math.Max(0, TextCleaner.CountWords(raw) - TextCleaner.CountWords(clean)),
+        };
+        Dictations++;
+        WordsRemoved += item.WordsRemoved;
+        Save();
+        return item;
     }
 
     public void ClearRecent()

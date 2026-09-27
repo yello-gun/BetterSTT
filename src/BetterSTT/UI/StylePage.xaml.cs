@@ -18,6 +18,8 @@ public partial class StylePage : Page
         "Um, hi Sarah, so I was thinking... like, maybe we could, uh, meet on Tuesday or something. " +
         "I think I think the the new approach is better. Also, can you send the slides and stuff? Thanks.";
 
+    const string CodeSample = "Um, rename the variable to camel case user name and save it in config dot json.";
+
     const string MathSample = "Um, so x squared plus two x plus one equals open parenthesis x plus one close parenthesis squared.";
 
     /// <summary>One card per cleanup rule: how to read/write its switch and (optionally) its word list.</summary>
@@ -66,8 +68,8 @@ public partial class StylePage : Page
     void RefreshStyles()
     {
         // The "Try it" box shows math for a math style, as long as it still holds one of the samples.
-        if (SampleBox.Text is SampleSpeech or MathSample)
-            SampleBox.Text = Current.SpokenMath != MathFormat.Off ? MathSample : SampleSpeech;
+        if (SampleBox.Text is SampleSpeech or MathSample or CodeSample)
+            SampleBox.Text = Current.SpokenMath != MathFormat.Off ? MathSample : Current.SpokenCode ? CodeSample : SampleSpeech;
         StyleCards.Children.Clear();
         foreach (var style in _c.Settings.Styles) StyleCards.Children.Add(StyleCard(style));
         BuildEditor();
@@ -132,6 +134,7 @@ public partial class StylePage : Page
                 ParagraphStarters = source.ParagraphStarters.ToList(),
                 SpokenMath = source.SpokenMath,
                 SpokenLayout = source.SpokenLayout,
+                SpokenCode = source.SpokenCode,
                 SpokenPunctuation = source.SpokenPunctuation,
             });
             s.Style = name;
@@ -239,6 +242,10 @@ public partial class StylePage : Page
         Editor.Children.Add(Option("Spoken punctuation",
             "Say “comma”, “period”, “question mark”, “exclamation point”, “colon”, “semicolon”, “open quote” and “close quote” to type them. Useful if you like to control punctuation yourself.",
             style.SpokenPunctuation, on => EditStyle(s => s.SpokenPunctuation = on), new StackPanel()));
+
+        Editor.Children.Add(Option("Spoken code",
+            "For code and terminals: “camel case user name” → userName (also pascal, snake, kebab and constant case), and “dot”, “underscore”, “slash”, “equals”, brackets and more become symbols. Nothing is added that you didn't say.",
+            style.SpokenCode, on => EditStyle(s => s.SpokenCode = on), new StackPanel()));
 
         // Spoken math
         var mathDetails = new StackPanel { Orientation = Orientation.Horizontal };

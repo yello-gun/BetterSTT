@@ -68,6 +68,22 @@ public partial class GeneralPage : Page
         LivePreviewSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.LivePreview = false); };
         PasteLastSwitch.Checked += (_, _) => { if (!_building) _c.Update(s => s.PasteLastEnabled = true); };
         PasteLastSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.PasteLastEnabled = false); };
+        AddWordSwitch.Checked += (_, _) => { if (!_building) _c.Update(s => s.AddWordEnabled = true); };
+        AddWordSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.AddWordEnabled = false); };
+        foreach (var (_, label) in SizeOptions) SizeBox.Items.Add(label);
+        SizeBox.SelectionChanged += (_, _) =>
+        {
+            if (_building || SizeBox.SelectedIndex < 0) return;
+            _c.Update(s => s.OverlaySize = SizeOptions[SizeBox.SelectedIndex].Size);
+            App.Overlay?.ShowPreview();
+        };
+        foreach (int o in OpacityOptions) OpacityBox.Items.Add($"{o}%");
+        OpacityBox.SelectionChanged += (_, _) =>
+        {
+            if (_building || OpacityBox.SelectedIndex < 0) return;
+            _c.Update(s => s.OverlayOpacity = OpacityOptions[OpacityBox.SelectedIndex]);
+            App.Overlay?.ShowPreview();
+        };
         UpdateSwitch.Checked += (_, _) => { if (!_building) _c.Update(s => s.CheckForUpdates = true); RefreshUpdates(); };
         UpdateSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.CheckForUpdates = false); RefreshUpdates(); };
 
@@ -107,6 +123,9 @@ public partial class GeneralPage : Page
         int tail = _c.Settings.TailCaptureMs;
         TailBox.SelectedIndex = Array.IndexOf(TailOptions, TailOptions.MinBy(o => Math.Abs(o.Ms - tail)));
         PasteLastSwitch.IsChecked = _c.Settings.PasteLastEnabled;
+        AddWordSwitch.IsChecked = _c.Settings.AddWordEnabled;
+        SizeBox.SelectedIndex = Math.Max(0, Array.FindIndex(SizeOptions, o => o.Size == _c.Settings.OverlaySize));
+        OpacityBox.SelectedIndex = Math.Max(0, Array.IndexOf(OpacityOptions, OpacityOptions.MinBy(o => Math.Abs(o - _c.Settings.OverlayOpacity))));
         PositionBox.SelectedIndex = Math.Max(0, Array.FindIndex(PositionOptions, o => o.Position == _c.Settings.OverlayPosition));
         ScreenBox.SelectedIndex = _c.Settings.OverlayOnPrimaryScreen ? 1 : 0;
         OverlaySwitch.IsChecked = _c.Settings.ShowOverlay;
@@ -185,6 +204,17 @@ public partial class GeneralPage : Page
             ? "Another app is using this shortcut. Choose a different one."
             : "Types your most recent dictation again, e.g. if it landed in the wrong window.";
         PasteLastHint.SetResourceReference(TextBlock.ForegroundProperty, pasteLastBroken ? Theme.Critical : Theme.TextSecondary);
+
+        bool addWordOn = _c.Settings.AddWordEnabled;
+        AddWordKeys.Content = Theme.Keycaps(_c.Settings.AddWordHotkey, 13);
+        AddWordKeys.Opacity = AddWordChangeButton.Opacity = addWordOn ? 1 : 0.4;
+        AddWordChangeButton.IsEnabled = addWordOn;
+        AddWordChangeButton.Content = "Change";
+        bool addWordBroken = addWordOn && !_c.AddWordRegistered;
+        AddWordHint.Text = addWordBroken
+            ? "Another app is using this shortcut. Choose a different one."
+            : "Select a word in any app and press this to add it to your dictionary.";
+        AddWordHint.SetResourceReference(TextBlock.ForegroundProperty, addWordBroken ? Theme.Critical : Theme.TextSecondary);
     }
 
     void OnToggleMode(object sender, RoutedEventArgs e) => _c.Update(s => s.Activation = ActivationMode.Toggle);
@@ -197,10 +227,15 @@ public partial class GeneralPage : Page
 
     void OnChangePasteLast(object sender, RoutedEventArgs e) => BeginCapture(HotkeyTarget.PasteLast);
 
+    void OnChangeAddWord(object sender, RoutedEventArgs e) => BeginCapture(HotkeyTarget.AddWord);
+
     (ContentControl Keys, TextBlock Hint, Wpf.Ui.Controls.Button Button) CaptureUi(HotkeyTarget target) =>
-        target == HotkeyTarget.Dictate
-            ? (ShortcutKeys, ShortcutHint, ChangeButton)
-            : (PasteLastKeys, PasteLastHint, PasteLastChangeButton);
+        target switch
+        {
+            HotkeyTarget.Dictate => (ShortcutKeys, ShortcutHint, ChangeButton),
+            HotkeyTarget.PasteLast => (PasteLastKeys, PasteLastHint, PasteLastChangeButton),
+            _ => (AddWordKeys, AddWordHint, AddWordChangeButton),
+        };
 
     void BeginCapture(HotkeyTarget target)
     {
@@ -316,6 +351,11 @@ public partial class GeneralPage : Page
     ];
 
     void OnPreviewOverlay(object sender, RoutedEventArgs e) => App.Overlay?.ShowPreview();
+
+    static readonly (OverlaySize Size, string Label)[] SizeOptions =
+        [(OverlaySize.Small, "Small"), (OverlaySize.Normal, "Normal"), (OverlaySize.Large, "Large")];
+
+    static readonly int[] OpacityOptions = [100, 85, 70, 55];
 
     // ---- tail capture ----
 

@@ -79,6 +79,7 @@ public static class TextCleaner
         if (style.RemoveVagueEndings) s = RemoveVagueEndings(s, style.VagueEndings);
         s = ApplyReplacements(s, replacements);
         s = SpokenMath.Convert(s, style.SpokenMath);
+        if (style.SpokenCode) s = SpokenCode.Convert(s);
         if (style.SpokenPunctuation) s = ApplySpokenPunctuation(s);
 
         // Spoken "new line" / "new paragraph" split the text into blocks; automatic paragraphs work within each.

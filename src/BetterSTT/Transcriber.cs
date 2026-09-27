@@ -13,6 +13,9 @@ public sealed class Transcriber : IDisposable
     // Loading a model disposes the old one, so it must never overlap a transcription.
     readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>The language of the last transcription, as detected by the model (e.g. "es").</summary>
+    public string? LastLanguage { get; private set; }
+
     public string RuntimeName => RuntimeOptions.LoadedLibrary?.ToString() ?? "not loaded";
 
     public static string ModelPath(GgmlType type, QuantizationType quant) =>
@@ -102,7 +105,9 @@ public sealed class Transcriber : IDisposable
         try
         {
             var factory = _factory ?? throw new InvalidOperationException("The speech model is not loaded yet.");
-            return await RunAsync(factory, samples, s, ct);
+            var (text, language) = await RunAsync(factory, samples, s, ct);
+            LastLanguage = language;
+            return text;
         }
         finally
         {
@@ -110,7 +115,7 @@ public sealed class Transcriber : IDisposable
         }
     }
 
-    static async Task<string> RunAsync(WhisperFactory factory, float[] samples, AppSettings s, CancellationToken ct)
+    static async Task<(string Text, string? Language)> RunAsync(WhisperFactory factory, float[] samples, AppSettings s, CancellationToken ct)
     {
         var builder = factory.CreateBuilder()
             .WithNoSpeechThreshold(0.6f)
@@ -123,9 +128,13 @@ public sealed class Transcriber : IDisposable
         // Async disposal waits for a cancelled run (a live preview stopped mid-way) to wind down first.
         await using var processor = builder.Build();
         var text = new StringBuilder();
+        string? language = null;
         await foreach (var segment in processor.ProcessAsync(samples, ct))
+        {
             text.Append(segment.Text);
-        return text.ToString().Trim();
+            if (string.IsNullOrEmpty(language) && !string.IsNullOrEmpty(segment.Language)) language = segment.Language;
+        }
+        return (text.ToString().Trim(), language);
     }
 
     public void Dispose()

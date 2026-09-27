@@ -16,6 +16,8 @@ public enum ActivationMode { Toggle, Hold, HandsFree }
 
 public enum OverlayPosition { BottomCenter, BottomLeft, BottomRight, TopCenter, TopLeft, TopRight }
 
+public enum OverlaySize { Small, Normal, Large }
+
 /// <summary>A word fix: whenever <see cref="From"/> is heard as a whole word or phrase, type <see cref="To"/>.</summary>
 public sealed class Replacement
 {
@@ -45,6 +47,11 @@ public sealed class AppProfile
     public string? Style { get; set; }
     /// <summary>Speech language for this app (a code from <see cref="AppSettings.Languages"/>); null uses the usual one.</summary>
     public string? Language { get; set; }
+    /// <summary>
+    /// Turns line breaks into spaces, e.g. for terminals, where each line of a multi-line paste can run as a
+    /// command. Null keeps them.
+    /// </summary>
+    public bool? JoinLines { get; set; }
     /// <summary>Before 2.5: exact words per app. Read only to migrate it to <see cref="Style"/>.</summary>
     public bool ExactWords { get; set; }
 }
@@ -55,7 +62,7 @@ public sealed class AppProfile
 /// </summary>
 public sealed class WritingStyle
 {
-    public const string ExactName = "Exact words", NaturalName = "Natural", FormalName = "Formal", MathName = "Math";
+    public const string ExactName = "Exact words", NaturalName = "Natural", FormalName = "Formal", MathName = "Math", CodeName = "Code";
 
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
@@ -80,6 +87,9 @@ public sealed class WritingStyle
     public bool SpokenLayout { get; set; } = true;
     /// <summary>Saying "comma", "period", "question mark"… types the mark.</summary>
     public bool SpokenPunctuation { get; set; }
+
+    /// <summary>Turns spoken code ("camel case user name", "dot", "underscore") into identifiers and symbols.</summary>
+    public bool SpokenCode { get; set; }
 
     /// <summary>Turns spoken math ("x squared plus one") into symbols or LaTeX.</summary>
     public MathFormat SpokenMath { get; set; }
@@ -122,7 +132,13 @@ public sealed class WritingStyle
         Description = "Writes spoken math as symbols: “x squared plus one over two” → x² + 1/2.",
     };
 
-    public static List<WritingStyle> Defaults() => [Exact(), Natural(), Formal(), MathStyle()];
+    public static WritingStyle CodeStyle() => new()
+    {
+        Name = CodeName, BuiltIn = true, SpokenCode = true,
+        Description = "For code and terminals: “camel case user name” → userName, “file dot txt” → file.txt.",
+    };
+
+    public static List<WritingStyle> Defaults() => [Exact(), Natural(), Formal(), MathStyle(), CodeStyle()];
 }
 
 public static class AppPaths
@@ -298,6 +314,16 @@ public sealed class AppSettings
         ("de", "German"), ("it", "Italian"), ("pt", "Portuguese"), ("nl", "Dutch"), ("ja", "Japanese"), ("zh", "Chinese"),
     ];
 
+    /// <summary>"es" → "Spanish". Null for no code.</summary>
+    public static string? LanguageName(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        var known = Languages.FirstOrDefault(l => l.Code == code);
+        if (known.Name != null) return known.Name;
+        try { return new System.Globalization.CultureInfo(code).EnglishName; }
+        catch (System.Globalization.CultureNotFoundException) { return code; }
+    }
+
     public HotkeyBinding Hotkey { get; set; } = new();
     public ActivationMode Activation { get; set; } = ActivationMode.Toggle;
     /// <summary>Keeps recording this long after you stop, so the last word isn't clipped.</summary>
@@ -305,6 +331,13 @@ public sealed class AppSettings
     public bool PasteLastEnabled { get; set; } = true;
     // Not Ctrl+Alt+V: that is Paste Special in Office.
     public HotkeyBinding PasteLastHotkey { get; set; } = new() { Key = Keys.V, Ctrl = true, Alt = true, Shift = true };
+    /// <summary>Select a word in any app and press this to add it to the dictionary.</summary>
+    public bool AddWordEnabled { get; set; } = true;
+    public HotkeyBinding AddWordHotkey { get; set; } = new() { Key = Keys.D, Ctrl = true, Alt = true };
+    /// <summary>While on, dictations aren't kept in the recent list (only the totals count them).</summary>
+    public bool PrivateMode { get; set; }
+    /// <summary>Line breaks become spaces (set per app on the Apps page).</summary>
+    public bool JoinLines { get; set; }
     /// <summary>Frees the model's memory after this many idle minutes; 0 keeps it loaded.</summary>
     public int UnloadModelAfterMinutes { get; set; }
     public int MicrophoneDevice { get; set; } = -1; // -1 = Windows default
@@ -341,10 +374,13 @@ public sealed class AppSettings
     /// <summary>Per-app overrides, matched by process name. Terminals get no trailing space by default.</summary>
     public List<AppProfile> AppProfiles { get; set; } =
     [
-        new() { ProcessName = "WindowsTerminal", DisplayName = "Windows Terminal", AddTrailingSpace = false },
+        new() { ProcessName = "WindowsTerminal", DisplayName = "Windows Terminal", AddTrailingSpace = false, JoinLines = true },
     ];
 
     public OverlayPosition OverlayPosition { get; set; } = OverlayPosition.BottomCenter;
+    public OverlaySize OverlaySize { get; set; } = OverlaySize.Normal;
+    /// <summary>Indicator opacity in percent.</summary>
+    public int OverlayOpacity { get; set; } = 100;
     /// <summary>True: always the main screen. False: the screen the mouse is on.</summary>
     public bool OverlayOnPrimaryScreen { get; set; }
 
@@ -428,6 +464,7 @@ public sealed class AppSettings
         if (p.OutputMethod is { } method) s.OutputMethod = method;
         if (p.ShowOverlay is { } overlay) s.ShowOverlay = overlay;
         if (!string.IsNullOrWhiteSpace(p.Language)) s.Language = p.Language;
+        if (p.JoinLines is { } join) s.JoinLines = join;
         if (p.ExactWords) s.Style = WritingStyle.ExactName; // unmigrated pre-2.5 profile
         if (p.Style != null && s.Styles.Any(st => string.Equals(st.Name, p.Style, StringComparison.OrdinalIgnoreCase)))
             s.Style = p.Style;
