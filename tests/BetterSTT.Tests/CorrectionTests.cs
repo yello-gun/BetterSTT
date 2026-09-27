@@ -27,6 +27,8 @@ public class CorrectionTests
     [InlineData("The file is big, no wait, huge.", "The file is huge.")]
     // "Scratch that" on its own drops what came before it.
     [InlineData("Buy milk. Scratch that. Buy eggs and bread.", "Buy eggs and bread.")]
+    [InlineData("Do you want APA or MLA? Scratch that. The syllabus says APA.", "The syllabus says APA.")]
+    [InlineData("We should meet Tuesday, scratch that, Wednesday.", "We should meet Wednesday.")]
     [InlineData("First point is done. The second one is late, scratch that.", "First point is done.")]
     // Fillers around the correction are ignored.
     [InlineData("Um, it's on Tuesday, uh, no wait, um, Wednesday.", "It's on Wednesday.")]

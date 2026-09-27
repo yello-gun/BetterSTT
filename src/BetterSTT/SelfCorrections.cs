@@ -128,7 +128,9 @@ public static class SelfCorrections
         bool sentenceStartedBeforeFix = afterFullStop || m.Groups["pre"].Value is "." or "!" or "?";
         if (sentenceStartedBeforeFix) fix[0] = LowerIfCommon(fix[0]);
 
-        var result = Align(scope, fix, strength);
+        // "…MLA? Scratch that. The syllabus says APA." A strong cue said as its own sentence takes back the
+        // whole previous sentence; mid-sentence ("Tuesday, scratch that, Wednesday") it's lined up like the others.
+        var result = strength == Strength.Strong && afterFullStop ? [.. fix] : Align(scope, fix, strength);
         if (result == null) return null;
         if (continuation.Length > 0) result.Add(continuation);
         string sentence = Capitalize(string.Join(' ', result));
