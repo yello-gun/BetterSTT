@@ -25,24 +25,28 @@ Press **Ctrl + Alt + Space** in any app to start listening, and press it again t
 
 - **Word fixes.** If it keeps writing "git hub", click the word in a recent dictation and type "GitHub". From then on it's fixed, and the word is also given to the speech model as a hint. All fixes are listed on the Dictionary page.
 - **Per-app rules.** Different settings for different apps: exact words in your code editor, no trailing space in the terminal, typing instead of pasting where paste is blocked, or no indicator in games.
-- **Exact words, one click away.** Switch cleanup off from the Home page or the tray menu when you want exactly what you said. Every recent dictation also has "Copy original".
+- **Writing styles.** *Exact words* types what you said, *Natural* removes fillers and stutters, and *Formal* also drops vague endings and adds paragraphs. You can edit any style, create your own, and switch from the Home page or the tray.
+- **See it as you say it.** A live draft of your words appears in the indicator while you talk.
 - **Put the indicator where you like.** Any corner or edge, on the screen with the mouse or always on the main one.
 
 ![Dictionary page](docs/screenshots/dictionary-dark.png)
 
 ## What gets removed
 
-Every rule can be switched off, and every word list can be edited, on the Cleanup page. It also has a live preview.
+Every rule can be switched off, and every word list can be edited, on the Style page, which also has a live "Try it" box.
 
 | Rule | Example |
 |---|---|
 | Filler sounds | "Um, I think, uh, we should" → "I think we should" |
 | Pause marks | "I was thinking... maybe" → "I was thinking maybe" |
 | Verbal fillers (only when they stand alone between commas) | "It was, like, huge" → "It was huge" (but "I like pizza" stays) |
-| Stutters and repeats | "I-I think the the plan" → "I think the plan" |
+| Stutters and restarts | "I-I think the the plan" → "I think the plan"; "I think I think we should" → "I think we should"; "we were go- going" → "we were going" |
 | Non-speech tags | "[BLANK_AUDIO]", "(music)" → removed |
+| Vague endings (Formal style) | "we could grab lunch or something" → "we could grab lunch" |
 
-![Cleanup page](docs/screenshots/cleanup-light.png)
+The **Formal** style also splits longer text into paragraphs, with a blank line between them. A new paragraph starts when you change topic ("Also…", "Next…", "Finally…"), after a greeting ("Hi Sarah,") and before a sign-off ("Thanks."), and when a paragraph reaches its sentence limit. These cues come from your wording: BetterSTT uses rules, not an AI model, so it doesn't rewrite what you meant.
+
+![Style page](docs/screenshots/style-light.png)
 
 ## Private and local
 
@@ -89,6 +93,7 @@ docs/screenshots/        images for this README (regenerate with --screenshots)
 - `--background` starts in the tray without opening the window (used by the Windows startup entry).
 - `--transcribe input.wav result.txt` transcribes a 16 kHz mono WAV file and reports the runtime and timing.
 - `--screenshots <folder>` renders every page in light and dark, plus the on-screen pill, to PNG files. It uses sample data.
+- `--no-paste` sends every dictation to the clipboard only and never types into a window. It's for automated testing.
 
 ## Privacy
 

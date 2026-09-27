@@ -61,6 +61,16 @@ public sealed class AudioRecorder : IDisposable
         _wave = wave;
     }
 
+    /// <summary>A copy of the most recent audio (up to <paramref name="maxSeconds"/>), without stopping.</summary>
+    public float[] Snapshot(int maxSeconds)
+    {
+        lock (_gate)
+        {
+            int count = Math.Min(_samples.Count, maxSeconds * SampleRate);
+            return _samples.GetRange(_samples.Count - count, count).ToArray();
+        }
+    }
+
     public async Task<float[]> StopAsync()
     {
         var wave = _wave;

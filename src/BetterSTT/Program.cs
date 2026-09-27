@@ -25,6 +25,7 @@ static class Program
 
         string? screenshotDir = args is ["--screenshots", var dir] ? dir : null;
         bool background = args.Contains("--background");
+        TextInjector.ClipboardOnly = args.Contains("--no-paste");
 
         using var mutex = new Mutex(true, @"Local\BetterSTT.SingleInstance", out bool firstInstance);
         if (!firstInstance && screenshotDir == null)

@@ -10,12 +10,34 @@ public partial class DictionaryPage : Page
 {
     readonly DictationController _c = App.Controller;
 
+    readonly System.Windows.Threading.DispatcherTimer _vocabSave = new() { Interval = TimeSpan.FromMilliseconds(700) };
+    bool _loading;
+
     public DictionaryPage()
     {
         InitializeComponent();
         FromBox.KeyDown += OnEnter;
         ToBox.KeyDown += OnEnter;
-        Loaded += (_, _) => Refresh();
+
+        _vocabSave.Tick += (_, _) => SaveVocabulary();
+        VocabularyBox.TextChanged += (_, _) => { if (!_loading) { _vocabSave.Stop(); _vocabSave.Start(); } };
+        VocabularyBox.LostFocus += (_, _) => SaveVocabulary();
+
+        Loaded += (_, _) =>
+        {
+            _loading = true;
+            VocabularyBox.Text = _c.Settings.Vocabulary;
+            _loading = false;
+            Refresh();
+        };
+        Unloaded += (_, _) => { if (_vocabSave.IsEnabled) SaveVocabulary(); };
+    }
+
+    void SaveVocabulary()
+    {
+        _vocabSave.Stop();
+        string text = VocabularyBox.Text.Trim();
+        if (text != _c.Settings.Vocabulary) _c.Update(s => s.Vocabulary = text);
     }
 
     void OnEnter(object sender, KeyEventArgs e)

@@ -21,6 +21,18 @@ public static class TextCleaner
     static readonly Regex Ellipsis = new(@"\s*(?:\.[ ]?){2,}\s*", Opts);
     static readonly Regex Stutter = new(
         @"(?<![\p{L}'’])(?<w>\p{L}+)(?:(?:\s*,\s*|\s*-\s*|\s+)\k<w>(?![\p{L}'’]))+", Opts);
+    // A repeated run of 2–4 words: "I think I think we should".
+    static readonly Regex PhraseStutter = new(
+        @"(?<![\p{L}'’])(?<p>\p{L}+(?:['’]\p{L}+)?(?:\s+\p{L}+(?:['’]\p{L}+)?){1,3})(?:[\s,]+\k<p>(?![\p{L}'’]))+", Opts);
+    // A word cut off and restarted: "we were go- going", "it's a big—bigger problem". A plain hyphen
+    // without a following space is left alone, so real words like "re-read" are safe.
+    static readonly Regex CutOffWord = new(
+        @"(?<![\p{L}'’])(?<f>\p{L}+)(?:-\s+|\s*(?:—|–|--)\s*)(?=(?<n>\p{L}+))", Opts);
+    static readonly Regex SentenceBreak = new(@"(?<=[.!?][""”’)]?)\s+(?=[\p{Lu}\p{N}""“(])");
+    static readonly Regex Greeting = new(
+        @"^(?<g>(?:hi|hello|hey|dear|greetings|good\s+(?:morning|afternoon|evening))\b[^,.!?]{0,40}[,!])\s*(?<rest>.*)$", Opts);
+    static readonly Regex SignOff = new(
+        @"^(?:thanks|thank\s+you|many\s+thanks|best|best\s+regards|kind\s+regards|regards|cheers|sincerely|talk\s+(?:soon|to\s+you\s+soon)|see\s+you(?:\s+soon)?|take\s+care)\b", Opts);
 
     public static string Clean(string text, CleanupOptions o)
     {
@@ -48,13 +60,89 @@ public static class TextCleaner
     }
 
     /// <summary>
-    /// The full text pipeline: cleanup, then word fixes. With cleanup off ("exact words") the
-    /// transcript is returned as heard, without word fixes either.
+    /// The full text pipeline: cleanup, the style's extra trimming, word fixes, then paragraphs.
+    /// The Exact words style (or cleanup switched off) returns the transcript as heard.
     /// </summary>
-    public static string Process(string raw, CleanupOptions cleanup, IReadOnlyList<Replacement> replacements)
+    public static string Process(string raw, CleanupOptions cleanup, IReadOnlyList<Replacement> replacements, WritingStyle? style = null)
     {
+        style ??= WritingStyle.Natural();
+        if (style.ExactWords || !cleanup.Enabled)
+            return string.IsNullOrWhiteSpace(raw) ? "" : Regex.Replace(raw, @"\s+", " ").Trim();
+
         string s = Clean(raw, cleanup);
-        return cleanup.Enabled ? ApplyReplacements(s, replacements) : s;
+        if (style.RemoveVagueEndings) s = RemoveVagueEndings(s, style.VagueEndings);
+        s = ApplyReplacements(s, replacements);
+        if (style.AutoParagraphs) s = FormatParagraphs(s, style);
+        return s;
+    }
+
+    /// <summary>
+    /// Removes vague tails that carry no information when they end a clause:
+    /// "we could grab lunch or something, then head back" → "we could grab lunch, then head back".
+    /// </summary>
+    public static string RemoveVagueEndings(string text, IReadOnlyList<string> endings)
+    {
+        var alts = endings
+            .Select(e => e.Trim())
+            .Where(e => e.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(e => e.Length)
+            .Select(e => string.Join(@"\s+", e.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(Regex.Escape)))
+            .ToList();
+        if (alts.Count == 0 || string.IsNullOrEmpty(text)) return text;
+        var rx = new Regex($@"(?:\s*,)?\s+(?:{string.Join("|", alts)})(?![\p{{L}}\p{{N}}])(?=\s*(?:[.,!?;:]|$))", Opts);
+        return Tidy(rx.Replace(text, ""));
+    }
+
+    /// <summary>
+    /// Splits text into paragraphs separated by a blank line. A new paragraph starts at a change of
+    /// topic ("Also…", "Next…"), after a greeting, before a sign-off, and after the style's maximum
+    /// number of sentences. Single-sentence text is left as it is.
+    /// </summary>
+    public static string FormatParagraphs(string text, WritingStyle style)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return text;
+        var sentences = SentenceBreak.Split(text.Trim()).Where(s => s.Length > 0).ToList();
+
+        var paragraphs = new List<List<string>>();
+        var current = new List<string>();
+        void Break()
+        {
+            if (current.Count > 0) paragraphs.Add(current);
+            current = new List<string>();
+        }
+
+        // "Hi John, I wanted to ask…" → "Hi John," on its own line, then the rest.
+        if (style.GreetingAndSignOffLines && sentences.Count > 0 && Greeting.Match(sentences[0]) is { Success: true } g)
+        {
+            string rest = g.Groups["rest"].Value.Trim();
+            current.Add(g.Groups["g"].Value.Trim());
+            Break();
+            if (rest.Length > 0) sentences[0] = char.ToUpperInvariant(rest[0]) + rest[1..];
+            else sentences.RemoveAt(0);
+        }
+
+        var starters = style.ParagraphStarters
+            .Select(s => s.Trim())
+            .Where(s => s.Length > 0)
+            .ToList();
+        int max = Math.Max(1, style.MaxSentencesPerParagraph);
+
+        for (int i = 0; i < sentences.Count; i++)
+        {
+            string sentence = sentences[i];
+            bool last = i == sentences.Count - 1;
+            bool signOff = style.GreetingAndSignOffLines && last && sentences.Count > 1 && sentence.Length <= 60 && SignOff.IsMatch(sentence);
+            bool topicChange = starters.Any(st =>
+                sentence.StartsWith(st, StringComparison.OrdinalIgnoreCase)
+                && (sentence.Length == st.Length || !char.IsLetterOrDigit(sentence[st.Length])));
+
+            if (current.Count > 0 && (signOff || topicChange || current.Count >= max)) Break();
+            current.Add(sentence);
+        }
+        Break();
+
+        return string.Join("\n\n", paragraphs.Select(p => string.Join(" ", p)));
     }
 
     /// <summary>
@@ -153,8 +241,16 @@ public static class TextCleaner
         return '\0';
     }
 
+    /// <summary>Cut-off words, repeated phrases, then repeated words (minus the allowed exceptions).</summary>
     static string RemoveStutters(string s, IEnumerable<string> exceptions)
     {
+        s = CutOffWord.Replace(s, m =>
+        {
+            string fragment = m.Groups["f"].Value, next = m.Groups["n"].Value;
+            bool restarted = next.Length > fragment.Length && next.StartsWith(fragment, StringComparison.OrdinalIgnoreCase);
+            return restarted ? "" : m.Value;
+        });
+        s = PhraseStutter.Replace(s, m => m.Groups["p"].Value);
         var keep = new HashSet<string>(exceptions.Select(e => e.Trim()), StringComparer.OrdinalIgnoreCase);
         return Stutter.Replace(s, m => keep.Contains(m.Groups["w"].Value) ? m.Value : m.Groups["w"].Value);
     }

@@ -50,6 +50,9 @@ public sealed class DictationController : IDisposable
     DateTime _lastUsed = DateTime.Now;
     string? _spoolPath;
     AppInfo? _target;
+    readonly DispatcherTimer _previewTimer;
+    CancellationTokenSource _previewCts = new();
+    bool _previewBusy;
 
     public DictationController(AppSettings settings, HistoryStore? history = null)
     {
@@ -71,6 +74,8 @@ public sealed class DictationController : IDisposable
             if (State != DictationState.Recording) { _holdTimer.Stop(); return; }
             if (!GlobalHotkey.IsKeyDown(Settings.Hotkey.Key)) _ = StopAndTranscribeAsync();
         };
+        _previewTimer = new DispatcherTimer();
+        _previewTimer.Tick += (_, _) => _ = UpdatePreviewAsync();
         _idleTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
         _idleTimer.Tick += (_, _) => _ = UnloadIfIdleAsync();
 
@@ -124,6 +129,11 @@ public sealed class DictationController : IDisposable
     public event Action? ModelChanged;
     public event Action? SettingsChanged;
     public event Action? PendingChanged;
+    /// <summary>The live draft (<see cref="PreviewText"/>) changed while recording.</summary>
+    public event Action? PreviewChanged;
+
+    /// <summary>A draft of what's being said, updated while recording; empty otherwise.</summary>
+    public string PreviewText { get; private set; } = "";
     public event Action<float>? LevelChanged;
     public event Action<DictationOutcome>? DictationFinished;
     /// <summary>A message for the user (shown as a tray notification). The flag marks problems.</summary>
@@ -376,6 +386,12 @@ public sealed class DictationController : IDisposable
         _hotkey.Register(CancelHotkeyId, EscapeKey); // Esc cancels, only while listening
         _maxLengthTimer.Interval = TimeSpan.FromMinutes(Math.Max(1, Settings.MaxRecordingMinutes));
         _maxLengthTimer.Start();
+        PreviewText = "";
+        if (ActiveSettings.LivePreview)
+        {
+            _previewTimer.Interval = TimeSpan.FromSeconds(1);
+            _previewTimer.Start();
+        }
         StateChanged?.Invoke();
         return true;
     }
@@ -409,6 +425,7 @@ public sealed class DictationController : IDisposable
     {
         _maxLengthTimer.Stop();
         _holdTimer.Stop();
+        StopPreview();
         _hotkey.Unregister(CancelHotkeyId);
     }
 
@@ -479,14 +496,15 @@ public sealed class DictationController : IDisposable
         LastTranscribeSeconds = timer.Elapsed.TotalSeconds;
         LastAudioSeconds = audio.Length / (double)AudioRecorder.SampleRate;
         _lastUsed = DateTime.Now;
-        return (raw, TextCleaner.Process(raw, settings.Cleanup, settings.Replacements));
+        return (raw, TextCleaner.Process(raw, settings.Cleanup, settings.Replacements, settings.CurrentStyle));
     }
 
     /// <summary>Types or pastes the text, falling back to the clipboard where typing can't reach.</summary>
     async Task<OutcomeKind> DeliverAsync(string text, string clipboardText, AppSettings settings)
     {
         // Started from BetterSTT's own window (or it has focus): there is nothing to paste into.
-        if (TextInjector.IsOwnWindowFocused())
+        // Test runs (--no-paste) never type into other windows either.
+        if (TextInjector.ClipboardOnly || TextInjector.IsOwnWindowFocused())
         {
             TextInjector.SetClipboard(clipboardText);
             return OutcomeKind.Copied;
@@ -502,8 +520,58 @@ public sealed class DictationController : IDisposable
         return OutcomeKind.Pasted;
     }
 
-    /// <summary>Turns cleanup off (type exactly what was heard) or back on.</summary>
-    public void ToggleExactWords() => Update(s => s.Cleanup.Enabled = !s.Cleanup.Enabled);
+    /// <summary>Makes a style the usual one.</summary>
+    public void SetStyle(string name) => Update(s => s.Style = name);
+
+    // ---- live preview ----
+
+    /// <summary>
+    /// While recording, re-transcribes the last few seconds so the indicator can show a draft of your
+    /// words. It only runs when the model is idle, backs off on slower machines, and is cancelled the
+    /// moment you stop, so the final transcription is never held up by more than a fraction of a second.
+    /// </summary>
+    async Task UpdatePreviewAsync()
+    {
+        if (_previewBusy || State != DictationState.Recording || ModelState != ModelState.Ready) return;
+        var samples = _recorder.Snapshot(maxSeconds: 25);
+        if (samples.Length < AudioRecorder.SampleRate) return;
+        var audio = AudioPrep.Prepare(samples);
+        if (audio == null) return;
+
+        _previewBusy = true;
+        var ct = _previewCts.Token;
+        var settings = ActiveSettings;
+        var timer = Stopwatch.StartNew();
+        try
+        {
+            string raw = await Task.Run(() => _transcriber.TranscribeAsync(audio, settings, ct), ct);
+            if (ct.IsCancellationRequested || State != DictationState.Recording) return;
+            PreviewText = TextCleaner.Process(raw, settings.Cleanup, settings.Replacements, settings.CurrentStyle)
+                .Replace("\n\n", " ");
+            PreviewChanged?.Invoke();
+            // Refresh about twice as often as a preview takes, within 0.8–4 s.
+            _previewTimer.Interval = TimeSpan.FromMilliseconds(Math.Clamp(timer.ElapsedMilliseconds * 2, 800, 4000));
+        }
+        catch (OperationCanceledException)
+        {
+            // Stopped or cancelled mid-preview.
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"Live preview failed: {ex.Message}");
+        }
+        finally
+        {
+            _previewBusy = false;
+        }
+    }
+
+    void StopPreview()
+    {
+        _previewTimer.Stop();
+        _previewCts.Cancel();
+        _previewCts = new CancellationTokenSource();
+    }
 
     // ---- paste last / recovery ----
 

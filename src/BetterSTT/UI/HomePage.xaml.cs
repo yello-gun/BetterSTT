@@ -33,6 +33,7 @@ public partial class HomePage : Page
             _c.LevelChanged += OnLevel;
             _c.DictationFinished += OnFinished;
             _c.PendingChanged += RefreshPending;
+            _c.PreviewChanged += RefreshPreview;
             RefreshAll();
         };
         Unloaded += (_, _) =>
@@ -43,6 +44,7 @@ public partial class HomePage : Page
             _c.LevelChanged -= OnLevel;
             _c.DictationFinished -= OnFinished;
             _c.PendingChanged -= RefreshPending;
+            _c.PreviewChanged -= RefreshPreview;
             _clock.Stop();
         };
     }
@@ -53,6 +55,14 @@ public partial class HomePage : Page
         RefreshPending();
         RefreshStats();
         RefreshRecent();
+    }
+
+    /// <summary>The live draft while listening; hidden otherwise.</summary>
+    void RefreshPreview()
+    {
+        bool show = _c.State == DictationState.Recording && _c.PreviewText.Length > 0;
+        PreviewLine.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        PreviewLine.Text = show ? _c.PreviewText : "";
     }
 
     /// <summary>Recordings that failed or were interrupted, each with Retry and Discard.</summary>
@@ -122,6 +132,7 @@ public partial class HomePage : Page
         StatusRing.Visibility = recording ? Visibility.Visible : Visibility.Hidden;
         Wave.Visibility = ElapsedText.Visibility = recording ? Visibility.Visible : Visibility.Collapsed;
         if (recording) _clock.Start(); else _clock.Stop();
+        RefreshPreview();
         ElapsedText.Text = _c.Elapsed.ToString(@"m\:ss");
 
         (StatusTitle.Text, string before, string after) = _c.State switch
@@ -164,20 +175,26 @@ public partial class HomePage : Page
         {
             Chips.Children.Add(Theme.Pill("Model asleep to save memory · wakes when you dictate", Theme.SubtleFill, Theme.TextSecondary));
         }
-        // Clicking the cleanup chip switches between cleaned-up text and exact words.
-        var cleanup = new Button
+        // Writing style, switchable right here (Exact words, Natural, Formal, or your own).
+        var styleLabel = Theme.Text("Style", 12, Theme.TextSecondary);
+        styleLabel.VerticalAlignment = VerticalAlignment.Center;
+        styleLabel.Margin = new Thickness(4, 0, 6, 0);
+        var styleBox = new ComboBox
         {
-            Content = _c.Settings.Cleanup.Enabled ? "Cleanup on" : "Exact words (cleanup off)",
+            ItemsSource = _c.Settings.Styles.Select(s => s.Name).ToList(),
+            SelectedItem = _c.Settings.CurrentStyle.Name,
             FontSize = 12,
-            Padding = new Thickness(10, 2, 10, 3),
-            MinHeight = 0,
+            MinWidth = 130,
             VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = _c.Settings.Cleanup.Enabled
-                ? "Click to type exactly what you say, with no cleanup or word fixes"
-                : "Click to turn cleanup back on",
+            ToolTip = _c.Settings.CurrentStyle.Description,
         };
-        cleanup.Click += (_, _) => _c.ToggleExactWords();
-        Chips.Children.Add(cleanup);
+        System.Windows.Automation.AutomationProperties.SetName(styleBox, "Writing style");
+        styleBox.SelectionChanged += (_, _) =>
+        {
+            if (styleBox.SelectedItem is string name && name != _c.Settings.CurrentStyle.Name) _c.SetStyle(name);
+        };
+        Chips.Children.Add(styleLabel);
+        Chips.Children.Add(styleBox);
 
         ActionButton.Content = _c.State switch
         {

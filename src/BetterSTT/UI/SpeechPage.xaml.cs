@@ -10,7 +10,6 @@ namespace BetterSTT.UI;
 public partial class SpeechPage : Page
 {
     readonly DictationController _c = App.Controller;
-    readonly DispatcherTimer _vocabSave = new() { Interval = TimeSpan.FromMilliseconds(700) };
     bool _building;
 
     sealed record LanguageItem(string Code, string Name);
@@ -35,10 +34,6 @@ public partial class SpeechPage : Page
                 _c.Update(s => s.UnloadModelAfterMinutes = UnloadOptions[UnloadBox.SelectedIndex].Minutes);
         };
 
-        _vocabSave.Tick += (_, _) => { _vocabSave.Stop(); SaveVocabulary(); };
-        VocabularyBox.TextChanged += (_, _) => { if (!_building) { _vocabSave.Stop(); _vocabSave.Start(); } };
-        VocabularyBox.LostFocus += (_, _) => SaveVocabulary();
-
         Loaded += (_, _) =>
         {
             _c.ModelChanged += Refresh;
@@ -51,7 +46,6 @@ public partial class SpeechPage : Page
             _c.ModelChanged -= Refresh;
             _c.DictationFinished -= OnFinished;
             _c.SettingsChanged -= RefreshEngine;
-            if (_vocabSave.IsEnabled) SaveVocabulary();
         };
     }
 
@@ -62,7 +56,6 @@ public partial class SpeechPage : Page
         var languages = (List<LanguageItem>)LanguageBox.ItemsSource;
         LanguageBox.SelectedItem = languages.FirstOrDefault(l => l.Code == _c.Settings.Language)
                                    ?? new LanguageItem(_c.Settings.Language, _c.Settings.Language);
-        VocabularyBox.Text = _c.Settings.Vocabulary;
         int unload = _c.Settings.UnloadModelAfterMinutes;
         UnloadBox.SelectedIndex = Array.IndexOf(UnloadOptions, UnloadOptions.MinBy(o => Math.Abs(o.Minutes - unload)));
         _building = false;
@@ -237,13 +230,6 @@ public partial class SpeechPage : Page
     {
         if (_building) return;
         _c.Update(s => s.UseGpu = on);
-    }
-
-    void SaveVocabulary()
-    {
-        _vocabSave.Stop();
-        string text = VocabularyBox.Text.Trim();
-        if (text != _c.Settings.Vocabulary) _c.Update(s => s.Vocabulary = text);
     }
 
     void OnRestart(object sender, RoutedEventArgs e) => ((App)Application.Current).RestartApp();

@@ -91,9 +91,12 @@ public partial class AppsPage : Page
             _c.Update(s => { if (s.ProfileFor(process) is { } p) change(p); });
 
         var options = new UniformGrid { Columns = 2, Margin = new Thickness(0, 12, 0, 0) };
-        options.Children.Add(Option("Cleanup", ["Clean up (usual)", "Exact words"],
-            profile.ExactWords ? 1 : 0,
-            i => Edit(p => p.ExactWords = i == 1)));
+        // "Usual" follows the style chosen on the Style page; the rest are the styles by name.
+        var styleNames = _c.Settings.Styles.Select(s => s.Name).ToList();
+        int styleIndex = profile.Style == null ? 0 : styleNames.FindIndex(n => string.Equals(n, profile.Style, StringComparison.OrdinalIgnoreCase)) + 1;
+        options.Children.Add(Option("Writing style", ["Usual", .. styleNames],
+            Math.Max(0, styleIndex),
+            i => Edit(p => p.Style = i == 0 ? null : styleNames[i - 1])));
         options.Children.Add(Option("Space after each dictation", ["Usual", "Add a space", "No space"],
             profile.AddTrailingSpace switch { null => 0, true => 1, false => 2 },
             i => Edit(p => p.AddTrailingSpace = i switch { 1 => true, 2 => false, _ => null })));

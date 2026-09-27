@@ -90,6 +90,12 @@ public sealed class GlobalHotkey : IDisposable
 /// <summary>Delivers text to whichever app currently has keyboard focus.</summary>
 public static class TextInjector
 {
+    /// <summary>
+    /// Set by --no-paste (used by automated tests): text only ever goes to the clipboard, so a test
+    /// can never type into whatever window the user happens to be working in.
+    /// </summary>
+    public static bool ClipboardOnly { get; set; }
+
     public static async Task InjectAsync(string text, AppSettings s)
     {
         await WaitForModifiersReleasedAsync();
@@ -268,6 +274,14 @@ public static class TextInjector
         var inputs = new List<INPUT>(text.Length * 2);
         foreach (char c in text)
         {
+            if (c == '\r') continue;
+            if (c == '\n')
+            {
+                // Paragraph breaks need a real Enter key; many apps ignore a typed newline character.
+                inputs.Add(Key(VK_RETURN, 0, 0));
+                inputs.Add(Key(VK_RETURN, 0, KEYEVENTF_KEYUP));
+                continue;
+            }
             inputs.Add(Key(0, c, KEYEVENTF_UNICODE));
             inputs.Add(Key(0, c, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP));
         }
@@ -281,7 +295,7 @@ public static class TextInjector
     };
 
     const uint INPUT_KEYBOARD = 1, KEYEVENTF_KEYUP = 0x2, KEYEVENTF_UNICODE = 0x4;
-    const ushort VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C, VK_V = 0x56;
+    const ushort VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C, VK_V = 0x56, VK_RETURN = 0x0D;
 
     [StructLayout(LayoutKind.Sequential)]
     struct INPUT { public uint type; public InputUnion U; }

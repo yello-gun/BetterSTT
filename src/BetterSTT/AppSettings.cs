@@ -27,8 +27,72 @@ public sealed class AppProfile
     public bool? AddTrailingSpace { get; set; }
     public OutputMethod? OutputMethod { get; set; }
     public bool? ShowOverlay { get; set; }
-    /// <summary>Type exactly what was heard: no cleanup and no word fixes.</summary>
+    /// <summary>Writing style for this app, by name; null uses the usual style.</summary>
+    public string? Style { get; set; }
+    /// <summary>Before 2.5: exact words per app. Read only to migrate it to <see cref="Style"/>.</summary>
     public bool ExactWords { get; set; }
+}
+
+/// <summary>
+/// How cleaned-up text is written. Every style except Exact words also runs the shared cleanup rules
+/// (fillers, pauses, stutters…) and word fixes.
+/// </summary>
+public sealed class WritingStyle
+{
+    public const string ExactName = "Exact words", NaturalName = "Natural", FormalName = "Formal";
+
+    public string Name { get; set; } = "";
+    public string Description { get; set; } = "";
+    /// <summary>Built-in styles can be edited but not renamed or deleted.</summary>
+    public bool BuiltIn { get; set; }
+    /// <summary>Type exactly what was heard: no cleanup, no word fixes, no style changes.</summary>
+    public bool ExactWords { get; set; }
+
+    /// <summary>Drops vague tails that add no information, e.g. "grab lunch or something" → "grab lunch".</summary>
+    public bool RemoveVagueEndings { get; set; }
+    public List<string> VagueEndings { get; set; } = DefaultVagueEndings();
+
+    /// <summary>Splits text into paragraphs separated by a blank line.</summary>
+    public bool AutoParagraphs { get; set; }
+    public int MaxSentencesPerParagraph { get; set; } = 4;
+    /// <summary>"Hi John," and "Thanks," each on their own line.</summary>
+    public bool GreetingAndSignOffLines { get; set; } = true;
+    /// <summary>A sentence starting with one of these (a change of topic) begins a new paragraph.</summary>
+    public List<string> ParagraphStarters { get; set; } = DefaultParagraphStarters();
+
+    public static List<string> DefaultVagueEndings() =>
+    [
+        "or something", "or something like that", "or whatever", "or anything", "or anything like that",
+        "and stuff", "and stuff like that", "and everything", "and all that", "and all that stuff",
+        "if that makes sense", "you know what I mean",
+    ];
+
+    public static List<string> DefaultParagraphStarters() =>
+    [
+        "Also", "Additionally", "In addition", "Another thing", "On another note", "Separately", "Moving on",
+        "Next", "Second", "Secondly", "Third", "Thirdly", "Finally", "Lastly", "However", "That said",
+        "Anyway", "Besides that", "Furthermore", "Overall", "In summary", "To sum up",
+    ];
+
+    public static WritingStyle Exact() => new()
+    {
+        Name = ExactName, BuiltIn = true, ExactWords = true,
+        Description = "Types exactly what was heard. No cleanup and no word fixes.",
+    };
+
+    public static WritingStyle Natural() => new()
+    {
+        Name = NaturalName, BuiltIn = true,
+        Description = "Removes fillers, pauses and stutters but keeps your wording.",
+    };
+
+    public static WritingStyle Formal() => new()
+    {
+        Name = FormalName, BuiltIn = true, RemoveVagueEndings = true, AutoParagraphs = true,
+        Description = "Also drops vague endings like “or something” and splits text into paragraphs.",
+    };
+
+    public static List<WritingStyle> Defaults() => [Exact(), Natural(), Formal()];
 }
 
 public static class AppPaths
@@ -214,6 +278,8 @@ public sealed class AppSettings
     public bool AddTrailingSpace { get; set; } = true;
     public bool PlaySounds { get; set; } = true;
     public bool ShowOverlay { get; set; } = true;
+    /// <summary>Shows a draft of your words in the indicator while you speak.</summary>
+    public bool LivePreview { get; set; } = true;
     public bool StartWithWindows { get; set; }
     public int MaxRecordingMinutes { get; set; } = 10;
 
@@ -251,6 +317,37 @@ public sealed class AppSettings
 
     public CleanupOptions Cleanup { get; set; } = new();
 
+    public List<WritingStyle> Styles { get; set; } = WritingStyle.Defaults();
+    /// <summary>The usual writing style, by name.</summary>
+    public string Style { get; set; } = WritingStyle.NaturalName;
+
+    public WritingStyle StyleNamed(string? name) =>
+        Styles.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase))
+        ?? Styles.FirstOrDefault(s => s.Name == WritingStyle.NaturalName)
+        ?? WritingStyle.Natural();
+
+    public WritingStyle CurrentStyle => StyleNamed(Style);
+
+    /// <summary>Brings settings saved by older versions up to date.</summary>
+    public void Migrate()
+    {
+        foreach (var builtIn in WritingStyle.Defaults())
+            if (!Styles.Any(s => string.Equals(s.Name, builtIn.Name, StringComparison.OrdinalIgnoreCase)))
+                Styles.Insert(Math.Min(Styles.Count, WritingStyle.Defaults().FindIndex(d => d.Name == builtIn.Name)), builtIn);
+
+        // Before 2.5, "exact words" was the cleanup master switch and a per-app flag. It's a style now.
+        if (!Cleanup.Enabled)
+        {
+            Style = WritingStyle.ExactName;
+            Cleanup.Enabled = true;
+        }
+        foreach (var p in AppProfiles.Where(p => p.ExactWords))
+        {
+            p.Style ??= WritingStyle.ExactName;
+            p.ExactWords = false;
+        }
+    }
+
     /// <summary>Default settings plus a few example fixes and app rules, for screenshots.</summary>
     public static AppSettings Sample()
     {
@@ -261,7 +358,9 @@ public sealed class AppSettings
             new() { From = "cloud code", To = "Claude Code" },
             new() { From = "kuber netties", To = "Kubernetes" },
         ]);
-        s.AppProfiles.Add(new AppProfile { ProcessName = "Code", DisplayName = "Visual Studio Code", ExactWords = true, AddTrailingSpace = false });
+        s.AppProfiles.Add(new AppProfile { ProcessName = "Code", DisplayName = "Visual Studio Code", Style = WritingStyle.ExactName, AddTrailingSpace = false });
+        s.AppProfiles.Add(new AppProfile { ProcessName = "OUTLOOK", DisplayName = "Microsoft Outlook", Style = WritingStyle.FormalName });
+        s.Style = WritingStyle.FormalName;
         return s;
     }
 
@@ -277,7 +376,9 @@ public sealed class AppSettings
         if (p.AddTrailingSpace is { } space) s.AddTrailingSpace = space;
         if (p.OutputMethod is { } method) s.OutputMethod = method;
         if (p.ShowOverlay is { } overlay) s.ShowOverlay = overlay;
-        if (p.ExactWords) s.Cleanup.Enabled = false;
+        if (p.ExactWords) s.Style = WritingStyle.ExactName; // unmigrated pre-2.5 profile
+        if (p.Style != null && s.Styles.Any(st => string.Equals(st.Name, p.Style, StringComparison.OrdinalIgnoreCase)))
+            s.Style = p.Style;
         return s;
     }
 
@@ -292,7 +393,11 @@ public sealed class AppSettings
         try
         {
             if (File.Exists(AppPaths.SettingsFile))
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(AppPaths.SettingsFile), Json) ?? new();
+            {
+                var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(AppPaths.SettingsFile), Json) ?? new();
+                loaded.Migrate();
+                return loaded;
+            }
         }
         catch (Exception ex)
         {

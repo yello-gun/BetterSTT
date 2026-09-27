@@ -15,7 +15,7 @@
     WindowStyle="None">
     <Border
         x:Name="Pill"
-        Height="48"
+        MinHeight="48"
         Margin="24"
         Padding="16,0,20,0"
         BorderThickness="1"
@@ -23,7 +23,8 @@
         <Border.Effect>
             <DropShadowEffect x:Name="Shadow" BlurRadius="24" Direction="270" Opacity="0.3" ShadowDepth="6" />
         </Border.Effect>
-        <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
+        <StackPanel VerticalAlignment="Center">
+        <StackPanel Height="46" VerticalAlignment="Center" Orientation="Horizontal">
             <Grid Width="22" Height="22" VerticalAlignment="Center">
                 <Ellipse x:Name="RecDot" Width="10" Height="10" />
                 <Ellipse x:Name="RecHalo" Width="18" Height="18" Opacity="0.25" />
@@ -48,6 +49,9 @@
                 <TextBlock x:Name="StopText" Margin="2,0,0,0" VerticalAlignment="Center" FontSize="12" Text="to stop" />
                 <TextBlock x:Name="EscText" Margin="4,0,0,0" VerticalAlignment="Center" FontSize="12" Text="· Esc cancels" />
             </StackPanel>
+        </StackPanel>
+        <!-- Live draft of what's being said; only shown while listening with live preview on. -->
+        <TextBlock x:Name="PreviewText" MaxWidth="560" Margin="4,0,4,12" FontSize="13" FontStyle="Italic" TextWrapping="NoWrap" Visibility="Collapsed" />
         </StackPanel>
     </Border>
 </Window>

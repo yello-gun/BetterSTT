@@ -27,8 +27,6 @@ public partial class GeneralPage : Page
             s => s.AddTrailingSpace, (s, v) => s.AddTrailingSpace = v),
         new("Start and stop sounds", "A short chime when listening starts and stops.",
             s => s.PlaySounds, (s, v) => s.PlaySounds = v),
-        new("Listening indicator", "A small pill near the bottom of the screen while you talk.",
-            s => s.ShowOverlay, (s, v) => s.ShowOverlay = v),
         new("Start with Windows", "Runs quietly in the system tray when you sign in.",
             s => s.StartWithWindows, (s, v) => s.StartWithWindows = v),
     ];
@@ -64,6 +62,10 @@ public partial class GeneralPage : Page
             if (_building || ScreenBox.SelectedIndex < 0) return;
             _c.Update(s => s.OverlayOnPrimaryScreen = ScreenBox.SelectedIndex == 1);
         };
+        OverlaySwitch.Checked += (_, _) => { OverlayDetails.Visibility = Visibility.Visible; if (!_building) _c.Update(s => s.ShowOverlay = true); };
+        OverlaySwitch.Unchecked += (_, _) => { OverlayDetails.Visibility = Visibility.Collapsed; if (!_building) _c.Update(s => s.ShowOverlay = false); };
+        LivePreviewSwitch.Checked += (_, _) => { if (!_building) _c.Update(s => s.LivePreview = true); };
+        LivePreviewSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.LivePreview = false); };
         PasteLastSwitch.Checked += (_, _) => { if (!_building) _c.Update(s => s.PasteLastEnabled = true); };
         PasteLastSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.PasteLastEnabled = false); };
 
@@ -103,6 +105,9 @@ public partial class GeneralPage : Page
         PasteLastSwitch.IsChecked = _c.Settings.PasteLastEnabled;
         PositionBox.SelectedIndex = Math.Max(0, Array.FindIndex(PositionOptions, o => o.Position == _c.Settings.OverlayPosition));
         ScreenBox.SelectedIndex = _c.Settings.OverlayOnPrimaryScreen ? 1 : 0;
+        OverlaySwitch.IsChecked = _c.Settings.ShowOverlay;
+        OverlayDetails.Visibility = _c.Settings.ShowOverlay ? Visibility.Visible : Visibility.Collapsed;
+        LivePreviewSwitch.IsChecked = _c.Settings.LivePreview;
         _building = false;
 
         RefreshShortcut();

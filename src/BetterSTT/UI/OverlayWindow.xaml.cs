@@ -51,7 +51,36 @@ public partial class OverlayWindow : Window
         _c.StateChanged += OnStateChanged;
         _c.LevelChanged += OnLevel;
         _c.DictationFinished += OnFinished;
+        _c.PreviewChanged += () =>
+        {
+            if (_c.State == DictationState.Recording && _c.ActiveSettings.ShowOverlay && IsVisible) SetPreview(_c.PreviewText);
+        };
         SourceInitialized += (_, _) => MakeClickThrough();
+    }
+
+    const string SamplePreview = "so I was thinking we could meet on Tuesday and go over the new plan";
+
+    /// <summary>Shows the live draft under the pill's main row (the end of it, if it's long).</summary>
+    void SetPreview(string text)
+    {
+        text = text.Trim();
+        if (text.Length == 0)
+        {
+            PreviewText.Visibility = Visibility.Collapsed;
+            Pill.CornerRadius = new CornerRadius(24);
+            return;
+        }
+        const int max = 80;
+        if (text.Length > max)
+        {
+            string tail = text[^max..];
+            int space = tail.IndexOf(' ');
+            text = "…" + (space >= 0 && space < 20 ? tail[(space + 1)..] : tail);
+        }
+        PreviewText.Text = text;
+        PreviewText.Visibility = Visibility.Visible;
+        Pill.CornerRadius = new CornerRadius(18);
+        ShowAtBottom(); // the pill grew; keep it anchored to its edge
     }
 
     /// <summary>For screenshots: shows a given state without a live dictation.</summary>
@@ -65,6 +94,7 @@ public partial class OverlayWindow : Window
                 var rnd = new Random(3);
                 foreach (var bar in _bars) bar.Height = 4 + rnd.NextDouble() * 18;
                 DetailText.Text = "0:07";
+                SetPreview(SamplePreview);
                 break;
             case "busy": ShowBusy(); break;
             default: ShowResult("Pasted", "4 filler words removed", success: true); break;
@@ -82,6 +112,7 @@ public partial class OverlayWindow : Window
         var rnd = new Random();
         foreach (var bar in _bars) bar.Height = 4 + rnd.NextDouble() * 18;
         DetailText.Text = "0:07";
+        if (_c.Settings.LivePreview) SetPreview(SamplePreview);
         _hideTimer.Stop();
         _hideTimer.Interval = TimeSpan.FromSeconds(3);
         _hideTimer.Start();
@@ -151,6 +182,7 @@ public partial class OverlayWindow : Window
     {
         _hideTimer.Stop();
         ApplyPalette();
+        SetPreview("");
         SetIndicator(recording: true);
         foreach (var bar in _bars) bar.Height = 4;
         Wave.Visibility = Visibility.Visible;
@@ -169,6 +201,7 @@ public partial class OverlayWindow : Window
     {
         _hideTimer.Stop();
         _clock.Stop();
+        SetPreview("");
         ApplyPalette();
         SetIndicator(spinner: true);
         Wave.Visibility = Visibility.Collapsed;
@@ -182,6 +215,7 @@ public partial class OverlayWindow : Window
     {
         _clock.Stop();
         ApplyPalette();
+        SetPreview("");
         SetIndicator(check: success);
         Wave.Visibility = Visibility.Collapsed;
         TitleText.Text = title;
@@ -213,7 +247,7 @@ public partial class OverlayWindow : Window
         Pill.BorderBrush = new SolidColorBrush(p.Border);
         Shadow.Opacity = p.ShadowOpacity;
         TitleText.Foreground = new SolidColorBrush(p.Text);
-        DetailText.Foreground = StopText.Foreground = EscText.Foreground = new SolidColorBrush(p.Subtle);
+        DetailText.Foreground = StopText.Foreground = EscText.Foreground = PreviewText.Foreground = new SolidColorBrush(p.Subtle);
         Separator.Fill = new SolidColorBrush(p.Border);
         RecDot.Fill = RecHalo.Fill = new SolidColorBrush(p.Recording);
         foreach (var bar in _bars) bar.Fill = new SolidColorBrush(p.Recording);

@@ -64,12 +64,6 @@
                 <ComboBox x:Name="LanguageBox" Grid.Column="1" MinWidth="220" AutomationProperties.Name="Language" DisplayMemberPath="Name" />
             </Grid>
         </Border>
-        <Border Style="{StaticResource Card}">
-            <StackPanel>
-                <TextBlock Style="{StaticResource Body}" Text="Words it should know" />
-                <TextBlock Margin="0,2,0,10" Style="{StaticResource Caption}" Text="Names, products and jargon, so they are spelled right. Separate with commas." />
-                <ui:TextBox x:Name="VocabularyBox" AutomationProperties.Name="Words it should know" MinLines="2" PlaceholderText="e.g. Claude, GitHub, Kubernetes" TextWrapping="Wrap" AcceptsReturn="False" />
-            </StackPanel>
-        </Border>
+        <TextBlock Margin="4,4,0,0" Style="{StaticResource Caption}" Text="Names and jargon it should spell right are on the Dictionary page." />
     </StackPanel>
 </Page>

@@ -10,7 +10,7 @@
         <Border Padding="24,18" Style="{StaticResource Card}">
             <StackPanel>
                 <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="Different rules for different apps" />
-                <TextBlock Margin="0,2,0,14" Style="{StaticResource Caption}" Text="BetterSTT notes which app you start dictating into and uses its rules instead of your usual settings. Anything left on &quot;Usual&quot; follows your normal settings." />
+                <TextBlock Margin="0,2,0,14" Style="{StaticResource Caption}" Text="BetterSTT notes which app you start dictating into and uses its rules instead of your usual settings. Anything left on &quot;Usual&quot; follows your normal settings. For example, Formal style for email and Exact words for code." />
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />

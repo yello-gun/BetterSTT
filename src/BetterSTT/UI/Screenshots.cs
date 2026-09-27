@@ -22,7 +22,7 @@ static class Screenshots
 
             (string Name, Type Page)[] pages =
             [
-                ("home", typeof(HomePage)), ("cleanup", typeof(CleanupPage)),
+                ("home", typeof(HomePage)), ("style", typeof(StylePage)),
                 ("dictionary", typeof(DictionaryPage)), ("apps", typeof(AppsPage)),
                 ("speech", typeof(SpeechPage)), ("general", typeof(GeneralPage)),
             ];

@@ -91,11 +91,11 @@ public class AppProfileTests
     }
 
     [Fact]
-    public void Exact_words_profile_turns_cleanup_off()
+    public void Exact_words_profile_uses_the_exact_words_style()
     {
-        var s = new AppSettings { AppProfiles = [new() { ProcessName = "code", ExactWords = true }] };
-        Assert.False(s.ForApp("Code").Cleanup.Enabled);
-        Assert.True(s.Cleanup.Enabled); // the original is untouched
+        var s = new AppSettings { AppProfiles = [new() { ProcessName = "code", Style = WritingStyle.ExactName }] };
+        Assert.True(s.ForApp("Code").CurrentStyle.ExactWords);
+        Assert.False(s.CurrentStyle.ExactWords); // the original is untouched
     }
 
     [Fact]

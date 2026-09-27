@@ -34,6 +34,7 @@
                         <StackPanel x:Name="Wave" Height="26" Margin="16,0,8,0" VerticalAlignment="Center" Orientation="Horizontal" />
                         <TextBlock x:Name="ElapsedText" VerticalAlignment="Center" FontSize="14" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
+                    <TextBlock x:Name="PreviewLine" Margin="0,8,0,0" FontSize="14" FontStyle="Italic" Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
                     <WrapPanel x:Name="HintPanel" Margin="0,8,0,0" />
                     <WrapPanel x:Name="Chips" Margin="0,12,0,0" />
                 </StackPanel>

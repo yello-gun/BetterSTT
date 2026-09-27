@@ -27,6 +27,14 @@
             </StackPanel>
         </Border>
 
+        <Border Margin="0,8,0,4" Padding="24,18" Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="Words it should know" />
+                <TextBlock Margin="0,2,0,10" Style="{StaticResource Caption}" Text="Names, products and jargon it should spell right even before it ever gets them wrong. Separate with commas." />
+                <ui:TextBox x:Name="VocabularyBox" AutomationProperties.Name="Words it should know" MinLines="2" PlaceholderText="e.g. Claude, Kubernetes, Sarah Nguyen" TextWrapping="Wrap" AcceptsReturn="False" />
+            </StackPanel>
+        </Border>
+
         <Grid Margin="0,20,0,8">
             <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="Word fixes" />
             <TextBlock x:Name="CountText" HorizontalAlignment="Right" Style="{StaticResource Caption}" />

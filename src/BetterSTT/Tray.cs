@@ -105,8 +105,8 @@ public sealed class TrayIcon : IDisposable
             var last = controller.History.Recent.FirstOrDefault();
             if (last != null) TextInjector.SetClipboard(last.Clean);
         });
-        // Unchecked = "exact words": type what was heard, with no cleanup or word fixes.
-        _cleanup = new WinForms.ToolStripMenuItem("Clean up filler words", null, (_, _) => controller.ToggleExactWords());
+        // Filled with one checkable item per writing style each time the menu opens.
+        _cleanup = new WinForms.ToolStripMenuItem("Writing style");
         var menu = new WinForms.ContextMenuStrip();
         menu.Items.AddRange(
         [
@@ -145,7 +145,15 @@ public sealed class TrayIcon : IDisposable
         _toggle.Text = (c.State == DictationState.Recording ? "Stop dictation" : "Start dictation") + $"\t{c.Settings.Hotkey}";
         _toggle.Enabled = c.State != DictationState.Transcribing;
         _copyLast.Enabled = c.History.Recent.Count > 0;
-        _cleanup.Checked = c.Settings.Cleanup.Enabled;
+        _cleanup.DropDownItems.Clear();
+        foreach (var style in c.Settings.Styles)
+        {
+            string name = style.Name;
+            _cleanup.DropDownItems.Add(new WinForms.ToolStripMenuItem(name, null, (_, _) => c.SetStyle(name))
+            {
+                Checked = string.Equals(name, c.Settings.CurrentStyle.Name, StringComparison.OrdinalIgnoreCase),
+            });
+        }
     }
 
     public void Dispose()

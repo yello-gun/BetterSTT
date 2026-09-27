@@ -1,0 +1,56 @@
+<Page
+    x:Class="BetterSTT.UI.StylePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    Title="Style">
+    <StackPanel Margin="24,8,40,32">
+        <TextBlock Style="{StaticResource PageTitle}" Text="Style" />
+
+        <Grid Margin="0,0,0,8">
+            <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="Writing style" />
+            <TextBlock HorizontalAlignment="Right" Style="{StaticResource Caption}" Text="Used everywhere, unless an app has its own style on the Apps page." />
+        </Grid>
+        <WrapPanel x:Name="StyleCards" />
+        <ui:Button Margin="0,4,0,0" Click="OnNewStyle" Content="New style" Icon="{ui:SymbolIcon Add24}" />
+
+        <Border x:Name="EditorCard" Margin="0,12,0,4" Padding="24,18" Style="{StaticResource Card}">
+            <StackPanel x:Name="Editor" />
+        </Border>
+
+        <Border Margin="0,12,0,4" Padding="24,18" Style="{StaticResource Card}">
+            <StackPanel>
+                <Grid>
+                    <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="Try it" />
+                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                        <Border Width="10" Height="10" Margin="0,0,6,0" VerticalAlignment="Center" Background="{DynamicResource SystemFillColorCriticalBackgroundBrush}" BorderBrush="{DynamicResource SystemFillColorCriticalBrush}" BorderThickness="1" CornerRadius="2" />
+                        <TextBlock Style="{StaticResource Caption}" Text="Removed" />
+                    </StackPanel>
+                </Grid>
+                <TextBlock Margin="0,12,0,6" Style="{StaticResource Caption}" Text="Type something the way you'd say it, to see what the selected style makes of it" />
+                <ui:TextBox x:Name="SampleBox" AcceptsReturn="False" TextWrapping="Wrap" AutomationProperties.Name="Sample text" />
+                <TextBlock x:Name="DiffText" Margin="0,14,0,10" FontSize="15" LineHeight="26" Foreground="{DynamicResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
+                <Border Padding="14,10" Background="{DynamicResource SubtleFillColorSecondaryBrush}" CornerRadius="6">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ui:SymbolIcon VerticalAlignment="Top" Margin="0,3,0,0" FontSize="16" Foreground="{DynamicResource SystemFillColorSuccessBrush}" Symbol="Checkmark24" />
+                        <TextBlock x:Name="ResultText" Grid.Column="1" Margin="10,0" FontSize="15" LineHeight="24" Foreground="{DynamicResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="SavedText" Grid.Column="2" VerticalAlignment="Top" Style="{StaticResource Caption}" />
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <Grid Margin="0,20,0,8">
+            <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="Cleanup rules" />
+            <TextBlock HorizontalAlignment="Right" Style="{StaticResource Caption}" Text="Shared by every style except Exact words." />
+        </Grid>
+        <StackPanel x:Name="Rules" />
+
+        <ui:Button Margin="0,12,0,0" HorizontalAlignment="Right" Click="OnReset" Content="Reset cleanup rules" />
+    </StackPanel>
+</Page>
