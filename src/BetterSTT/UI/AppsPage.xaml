@@ -1,0 +1,31 @@
+<Page
+    x:Class="BetterSTT.UI.AppsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    Title="Apps">
+    <StackPanel Margin="24,8,40,32">
+        <TextBlock Style="{StaticResource PageTitle}" Text="Apps" />
+
+        <Border Padding="24,18" Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="Different rules for different apps" />
+                <TextBlock Margin="0,2,0,14" Style="{StaticResource Caption}" Text="BetterSTT notes which app you start dictating into and uses its rules instead of your usual settings. Anything left on &quot;Usual&quot; follows your normal settings." />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ComboBox x:Name="AppPicker" AutomationProperties.Name="App to add" DisplayMemberPath="Label" />
+                    <ui:Button Grid.Column="1" Margin="8,0,0,0" Appearance="Transparent" Click="OnRefreshApps" Icon="{ui:SymbolIcon ArrowClockwise24}" ToolTip="Refresh the list of open apps" AutomationProperties.Name="Refresh the list of open apps" />
+                    <ui:Button Grid.Column="2" Margin="8,0,0,0" Appearance="Primary" Click="OnAdd" Content="Add app" Icon="{ui:SymbolIcon Add24}" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <TextBlock Style="{StaticResource SectionTitle}" Text="Your apps" />
+        <StackPanel x:Name="List" />
+        <TextBlock x:Name="EmptyText" Margin="4,4,0,0" Style="{StaticResource Caption}" Text="No app rules yet." />
+    </StackPanel>
+</Page>

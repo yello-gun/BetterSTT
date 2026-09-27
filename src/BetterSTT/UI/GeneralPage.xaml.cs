@@ -51,6 +51,19 @@ public partial class GeneralPage : Page
             if (_building || TailBox.SelectedIndex < 0) return;
             _c.Update(s => s.TailCaptureMs = TailOptions[TailBox.SelectedIndex].Ms);
         };
+        foreach (var (_, label) in PositionOptions) PositionBox.Items.Add(label);
+        PositionBox.SelectionChanged += (_, _) =>
+        {
+            if (_building || PositionBox.SelectedIndex < 0) return;
+            _c.Update(s => s.OverlayPosition = PositionOptions[PositionBox.SelectedIndex].Position);
+        };
+        ScreenBox.Items.Add("Screen with the mouse");
+        ScreenBox.Items.Add("Main screen");
+        ScreenBox.SelectionChanged += (_, _) =>
+        {
+            if (_building || ScreenBox.SelectedIndex < 0) return;
+            _c.Update(s => s.OverlayOnPrimaryScreen = ScreenBox.SelectedIndex == 1);
+        };
         PasteLastSwitch.Checked += (_, _) => { if (!_building) _c.Update(s => s.PasteLastEnabled = true); };
         PasteLastSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.PasteLastEnabled = false); };
 
@@ -88,6 +101,8 @@ public partial class GeneralPage : Page
         int tail = _c.Settings.TailCaptureMs;
         TailBox.SelectedIndex = Array.IndexOf(TailOptions, TailOptions.MinBy(o => Math.Abs(o.Ms - tail)));
         PasteLastSwitch.IsChecked = _c.Settings.PasteLastEnabled;
+        PositionBox.SelectedIndex = Math.Max(0, Array.FindIndex(PositionOptions, o => o.Position == _c.Settings.OverlayPosition));
+        ScreenBox.SelectedIndex = _c.Settings.OverlayOnPrimaryScreen ? 1 : 0;
         _building = false;
 
         RefreshShortcut();
@@ -238,6 +253,17 @@ public partial class GeneralPage : Page
         if (_window != null) _window.PreviewKeyDown -= OnCaptureKey;
         _c.ResumeHotkey();
     }
+
+    // ---- indicator position ----
+
+    static readonly (OverlayPosition Position, string Label)[] PositionOptions =
+    [
+        (OverlayPosition.BottomCenter, "Bottom center"), (OverlayPosition.BottomLeft, "Bottom left"),
+        (OverlayPosition.BottomRight, "Bottom right"), (OverlayPosition.TopCenter, "Top center"),
+        (OverlayPosition.TopLeft, "Top left"), (OverlayPosition.TopRight, "Top right"),
+    ];
+
+    void OnPreviewOverlay(object sender, RoutedEventArgs e) => App.Overlay?.ShowPreview();
 
     // ---- tail capture ----
 

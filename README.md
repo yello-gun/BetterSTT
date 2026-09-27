@@ -21,6 +21,15 @@ Press **Ctrl + Alt + Space** in any app to start listening, and press it again t
 - **Admin windows are handled.** Windows blocks other apps from typing into programs running as administrator. BetterSTT detects this and puts the text on the clipboard instead of silently losing it.
 - **Light on memory if you want.** It can unload the speech model after a period of idle time, and reloads it when you next dictate.
 
+## Make it yours
+
+- **Word fixes.** If it keeps writing "git hub", click the word in a recent dictation and type "GitHub". From then on it's fixed, and the word is also given to the speech model as a hint. All fixes are listed on the Dictionary page.
+- **Per-app rules.** Different settings for different apps: exact words in your code editor, no trailing space in the terminal, typing instead of pasting where paste is blocked, or no indicator in games.
+- **Exact words, one click away.** Switch cleanup off from the Home page or the tray menu when you want exactly what you said. Every recent dictation also has "Copy original".
+- **Put the indicator where you like.** Any corner or edge, on the screen with the mouse or always on the main one.
+
+![Dictionary page](docs/screenshots/dictionary-dark.png)
+
 ## What gets removed
 
 Every rule can be switched off, and every word list can be edited, on the Cleanup page. It also has a live preview.

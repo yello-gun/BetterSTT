@@ -37,6 +37,8 @@
             <ui:NavigationView.MenuItems>
                 <ui:NavigationViewItem Content="Home" Icon="{ui:SymbolIcon Home24}" TargetPageType="{x:Type local:HomePage}" />
                 <ui:NavigationViewItem Content="Cleanup" Icon="{ui:SymbolIcon Eraser24}" TargetPageType="{x:Type local:CleanupPage}" />
+                <ui:NavigationViewItem Content="Dictionary" Icon="{ui:SymbolIcon BookLetter24}" TargetPageType="{x:Type local:DictionaryPage}" />
+                <ui:NavigationViewItem Content="Apps" Icon="{ui:SymbolIcon WindowApps24}" TargetPageType="{x:Type local:AppsPage}" />
                 <ui:NavigationViewItem Content="Speech" Icon="{ui:SymbolIcon Mic24}" TargetPageType="{x:Type local:SpeechPage}" />
                 <ui:NavigationViewItem Content="General" Icon="{ui:SymbolIcon Settings24}" TargetPageType="{x:Type local:GeneralPage}" />
             </ui:NavigationView.MenuItems>

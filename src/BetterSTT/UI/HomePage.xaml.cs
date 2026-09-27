@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using Wpf.Ui.Controls;
 using Button = Wpf.Ui.Controls.Button;
 using TextBlock = System.Windows.Controls.TextBlock;
+using TextBox = Wpf.Ui.Controls.TextBox;
 
 namespace BetterSTT.UI;
 
@@ -15,6 +16,8 @@ public partial class HomePage : Page
     readonly Rectangle[] _bars;
     readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMilliseconds(250) };
     int _expanded = 0;
+    string? _fixWord;   // word being fixed in the expanded dictation
+    string? _fixSaved;  // confirmation after saving a fix
 
     public HomePage()
     {
@@ -161,7 +164,20 @@ public partial class HomePage : Page
         {
             Chips.Children.Add(Theme.Pill("Model asleep to save memory · wakes when you dictate", Theme.SubtleFill, Theme.TextSecondary));
         }
-        Chips.Children.Add(Theme.Pill(_c.Settings.Cleanup.Enabled ? "Cleanup on" : "Cleanup off", Theme.SubtleFill, Theme.TextPrimary));
+        // Clicking the cleanup chip switches between cleaned-up text and exact words.
+        var cleanup = new Button
+        {
+            Content = _c.Settings.Cleanup.Enabled ? "Cleanup on" : "Exact words (cleanup off)",
+            FontSize = 12,
+            Padding = new Thickness(10, 2, 10, 3),
+            MinHeight = 0,
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = _c.Settings.Cleanup.Enabled
+                ? "Click to type exactly what you say, with no cleanup or word fixes"
+                : "Click to turn cleanup back on",
+        };
+        cleanup.Click += (_, _) => _c.ToggleExactWords();
+        Chips.Children.Add(cleanup);
 
         ActionButton.Content = _c.State switch
         {
@@ -204,7 +220,8 @@ public partial class HomePage : Page
 
         var text = Theme.Text(item.Clean);
         string removed = item.WordsRemoved == 1 ? "1 word removed" : $"{item.WordsRemoved} words removed";
-        var meta = Theme.Text($"{Theme.TimeAgo(item.Time)} · {removed}", 12, Theme.TextSecondary);
+        string where = item.AppName != null ? $" · in {item.AppName}" : "";
+        var meta = Theme.Text($"{Theme.TimeAgo(item.Time)}{where} · {removed}", 12, Theme.TextSecondary);
         meta.Margin = new Thickness(0, 4, 0, 0);
         var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         texts.Children.Add(text);
@@ -220,6 +237,7 @@ public partial class HomePage : Page
         toggle.Click += (_, _) =>
         {
             _expanded = open ? -1 : index;
+            _fixWord = _fixSaved = null;
             RefreshRecent();
         };
 
@@ -259,9 +277,111 @@ public partial class HomePage : Page
             body.Children.Add(divider);
             body.Children.Add(label);
             body.Children.Add(diff);
+
+            var copyOriginal = new Button
+            {
+                Content = "Copy original",
+                Icon = new SymbolIcon { Symbol = SymbolRegular.Copy24 },
+                Margin = new Thickness(0, 10, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                ToolTip = "Copy exactly what you said, before cleanup",
+            };
+            copyOriginal.Click += (_, _) =>
+            {
+                TextInjector.SetClipboard(item.Raw.Trim());
+                copyOriginal.Content = "Copied";
+            };
+            body.Children.Add(copyOriginal);
+            body.Children.Add(FixAWord(item));
         }
 
         return new Border { Child = body, Style = (Style)FindResource("Card") };
+    }
+
+    /// <summary>Click a word that came out wrong, type the right spelling, and it's fixed from then on.</summary>
+    StackPanel FixAWord(RecentDictation item)
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 14, 0, 0) };
+        panel.Children.Add(Theme.Text("Fix a word: click one that came out wrong", 12, Theme.TextSecondary));
+
+        var words = new WrapPanel { Margin = new Thickness(-4, 4, 0, 0) };
+        var distinct = System.Text.RegularExpressions.Regex.Matches(item.Clean, @"[\p{L}\p{N}][\p{L}\p{N}'’-]*")
+            .Select(m => m.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        foreach (string word in distinct)
+        {
+            var chip = new Button
+            {
+                Content = word,
+                Appearance = word == _fixWord ? ControlAppearance.Primary : ControlAppearance.Transparent,
+                Padding = new Thickness(6, 2, 6, 2),
+                Margin = new Thickness(0, 0, 2, 2),
+                MinHeight = 0,
+                FontSize = 13,
+            };
+            chip.Click += (_, _) =>
+            {
+                _fixWord = word;
+                _fixSaved = null;
+                RefreshRecent();
+            };
+            words.Children.Add(chip);
+        }
+        panel.Children.Add(words);
+
+        if (_fixSaved != null)
+        {
+            var saved = Theme.Text(_fixSaved, 12, Theme.Success);
+            saved.Margin = new Thickness(0, 6, 0, 0);
+            panel.Children.Add(saved);
+        }
+        if (_fixWord == null) return panel;
+
+        // Editor: the heard spelling is editable too, so a phrase like "git hub" can be fixed.
+        var editor = new Grid { Margin = new Thickness(0, 8, 0, 0) };
+        editor.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        editor.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        editor.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        editor.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        editor.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var from = new TextBox { Text = _fixWord, PlaceholderText = "Heard as" };
+        var arrow = new SymbolIcon { Symbol = SymbolRegular.ArrowRight24, Margin = new Thickness(10, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
+        arrow.SetResourceReference(ForegroundProperty, Theme.TextSecondary);
+        var to = new TextBox { PlaceholderText = "Should be" };
+        System.Windows.Automation.AutomationProperties.SetName(from, "Heard as");
+        System.Windows.Automation.AutomationProperties.SetName(to, "Should be");
+        var save = new Button { Content = "Save fix", Appearance = ControlAppearance.Primary, Margin = new Thickness(10, 0, 6, 0) };
+        var cancel = new Button { Content = "Cancel" };
+        var error = Theme.Text("", 12, Theme.Critical);
+
+        void Save()
+        {
+            if (DictionaryPage.AddFix(_c, from.Text, to.Text) is { } problem)
+            {
+                error.Text = problem;
+                return;
+            }
+            _fixSaved = $"Saved. From now on “{from.Text.Trim()}” is typed as “{to.Text.Trim()}”. Manage fixes on the Dictionary page.";
+            _fixWord = null;
+            RefreshRecent();
+        }
+        save.Click += (_, _) => Save();
+        to.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) { e.Handled = true; Save(); } };
+        cancel.Click += (_, _) => { _fixWord = null; RefreshRecent(); };
+
+        Grid.SetColumn(arrow, 1);
+        Grid.SetColumn(to, 2);
+        Grid.SetColumn(save, 3);
+        Grid.SetColumn(cancel, 4);
+        editor.Children.Add(from);
+        editor.Children.Add(arrow);
+        editor.Children.Add(to);
+        editor.Children.Add(save);
+        editor.Children.Add(cancel);
+        panel.Children.Add(editor);
+        panel.Children.Add(error);
+        to.Loaded += (_, _) => to.Focus();
+        return panel;
     }
 
     void OnLevel(float level)

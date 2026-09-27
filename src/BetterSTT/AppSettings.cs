@@ -10,6 +10,27 @@ public enum OutputMethod { Paste, Type }
 /// <summary>Toggle: press to start, press again to stop. Hold: record while the shortcut is held down.</summary>
 public enum ActivationMode { Toggle, Hold }
 
+public enum OverlayPosition { BottomCenter, BottomLeft, BottomRight, TopCenter, TopLeft, TopRight }
+
+/// <summary>A word fix: whenever <see cref="From"/> is heard as a whole word or phrase, type <see cref="To"/>.</summary>
+public sealed class Replacement
+{
+    public string From { get; set; } = "";
+    public string To { get; set; } = "";
+}
+
+/// <summary>Settings that apply only while dictating into one app. Null means "same as everywhere else".</summary>
+public sealed class AppProfile
+{
+    public string ProcessName { get; set; } = "";
+    public string DisplayName { get; set; } = "";
+    public bool? AddTrailingSpace { get; set; }
+    public OutputMethod? OutputMethod { get; set; }
+    public bool? ShowOverlay { get; set; }
+    /// <summary>Type exactly what was heard: no cleanup and no word fixes.</summary>
+    public bool ExactWords { get; set; }
+}
+
 public static class AppPaths
 {
     public static string Data { get; } =
@@ -203,13 +224,62 @@ public sealed class AppSettings
     /// <summary>Names and jargon, comma-separated, so Whisper spells them right.</summary>
     public string Vocabulary { get; set; } = "";
 
+    /// <summary>Word fixes applied after cleanup, e.g. "git hub" → "GitHub".</summary>
+    public List<Replacement> Replacements { get; set; } = new();
+
+    /// <summary>Per-app overrides, matched by process name. Terminals get no trailing space by default.</summary>
+    public List<AppProfile> AppProfiles { get; set; } =
+    [
+        new() { ProcessName = "WindowsTerminal", DisplayName = "Windows Terminal", AddTrailingSpace = false },
+    ];
+
+    public OverlayPosition OverlayPosition { get; set; } = OverlayPosition.BottomCenter;
+    /// <summary>True: always the main screen. False: the screen the mouse is on.</summary>
+    public bool OverlayOnPrimaryScreen { get; set; }
+
     public string BuildPrompt()
     {
-        string vocab = Vocabulary.Trim().TrimEnd('.', ',');
-        return vocab.Length == 0 ? StylePrompt : $"{StylePrompt} Names and terms: {vocab}.";
+        // Fixed words double as recognition hints, so Whisper hears them right more often.
+        var terms = Vocabulary.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Concat(Replacements.Select(r => r.To.Trim()))
+            .Select(t => t.TrimEnd('.'))
+            .Where(t => t.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return terms.Count == 0 ? StylePrompt : $"{StylePrompt} Names and terms: {string.Join(", ", terms)}.";
     }
 
     public CleanupOptions Cleanup { get; set; } = new();
+
+    /// <summary>Default settings plus a few example fixes and app rules, for screenshots.</summary>
+    public static AppSettings Sample()
+    {
+        var s = new AppSettings();
+        s.Replacements.AddRange(
+        [
+            new() { From = "git hub", To = "GitHub" },
+            new() { From = "cloud code", To = "Claude Code" },
+            new() { From = "kuber netties", To = "Kubernetes" },
+        ]);
+        s.AppProfiles.Add(new AppProfile { ProcessName = "Code", DisplayName = "Visual Studio Code", ExactWords = true, AddTrailingSpace = false });
+        return s;
+    }
+
+    public AppProfile? ProfileFor(string? processName) =>
+        processName == null ? null
+            : AppProfiles.FirstOrDefault(p => string.Equals(p.ProcessName, processName, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>These settings with an app's profile applied on top; unchanged when the app has none.</summary>
+    public AppSettings ForApp(string? processName)
+    {
+        var s = Clone();
+        if (s.ProfileFor(processName) is not { } p) return s;
+        if (p.AddTrailingSpace is { } space) s.AddTrailingSpace = space;
+        if (p.OutputMethod is { } method) s.OutputMethod = method;
+        if (p.ShowOverlay is { } overlay) s.ShowOverlay = overlay;
+        if (p.ExactWords) s.Cleanup.Enabled = false;
+        return s;
+    }
 
     static readonly JsonSerializerOptions Json = new()
     {

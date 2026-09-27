@@ -94,7 +94,7 @@ public sealed class TrayIcon : IDisposable
 {
     readonly DictationController _controller;
     readonly WinForms.NotifyIcon _icon;
-    readonly WinForms.ToolStripMenuItem _toggle, _copyLast;
+    readonly WinForms.ToolStripMenuItem _toggle, _copyLast, _cleanup;
 
     public TrayIcon(DictationController controller, Action openWindow, Action exit)
     {
@@ -105,12 +105,16 @@ public sealed class TrayIcon : IDisposable
             var last = controller.History.Recent.FirstOrDefault();
             if (last != null) TextInjector.SetClipboard(last.Clean);
         });
+        // Unchecked = "exact words": type what was heard, with no cleanup or word fixes.
+        _cleanup = new WinForms.ToolStripMenuItem("Clean up filler words", null, (_, _) => controller.ToggleExactWords());
         var menu = new WinForms.ContextMenuStrip();
         menu.Items.AddRange(
         [
             new WinForms.ToolStripMenuItem("Open BetterSTT", null, (_, _) => openWindow()) { Font = new Font(WinForms.Control.DefaultFont, FontStyle.Bold) },
             _toggle,
             _copyLast,
+            new WinForms.ToolStripSeparator(),
+            _cleanup,
             new WinForms.ToolStripSeparator(),
             new WinForms.ToolStripMenuItem("Exit", null, (_, _) => exit()),
         ]);
@@ -141,6 +145,7 @@ public sealed class TrayIcon : IDisposable
         _toggle.Text = (c.State == DictationState.Recording ? "Stop dictation" : "Start dictation") + $"\t{c.Settings.Hotkey}";
         _toggle.Enabled = c.State != DictationState.Transcribing;
         _copyLast.Enabled = c.History.Recent.Count > 0;
+        _cleanup.Checked = c.Settings.Cleanup.Enabled;
     }
 
     public void Dispose()

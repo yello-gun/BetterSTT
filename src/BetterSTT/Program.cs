@@ -40,7 +40,7 @@ static class Program
         AppPaths.MigrateFromOldNames();
 
         // Screenshots use default settings and sample history so nothing personal ends up in them.
-        var settings = screenshotDir == null ? AppSettings.Load() : new AppSettings();
+        var settings = screenshotDir == null ? AppSettings.Load() : AppSettings.Sample();
         UseRuntime(settings);
 
         var app = new App(settings, background, showSignal, screenshotDir);

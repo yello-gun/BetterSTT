@@ -47,6 +47,42 @@ public static class TextCleaner
         return Tidy(s);
     }
 
+    /// <summary>
+    /// The full text pipeline: cleanup, then word fixes. With cleanup off ("exact words") the
+    /// transcript is returned as heard, without word fixes either.
+    /// </summary>
+    public static string Process(string raw, CleanupOptions cleanup, IReadOnlyList<Replacement> replacements)
+    {
+        string s = Clean(raw, cleanup);
+        return cleanup.Enabled ? ApplyReplacements(s, replacements) : s;
+    }
+
+    /// <summary>
+    /// Replaces whole words or phrases, case-insensitively. All fixes run in a single pass, so one
+    /// fix's output is never rewritten by another.
+    /// </summary>
+    public static string ApplyReplacements(string text, IReadOnlyList<Replacement> replacements)
+    {
+        // Spaces and hyphens are interchangeable, so "git hub", "git-hub" and "git  hub" all match.
+        static string Key(string s) => Regex.Replace(s.Trim(), @"[\s-]+", " ");
+
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var r in replacements)
+        {
+            string from = Key(r.From);
+            if (from.Length > 0 && !map.ContainsKey(from)) map[from] = r.To.Trim();
+        }
+        if (map.Count == 0 || string.IsNullOrEmpty(text)) return text;
+
+        // Longest first, so "git hub desktop" wins over "git hub".
+        string alternation = string.Join("|", map.Keys
+            .OrderByDescending(k => k.Length)
+            .Select(k => string.Join(@"[\s-]+", k.Split(' ').Select(Regex.Escape))));
+        var rx = new Regex($@"(?<![\p{{L}}\p{{N}}])(?:{alternation})(?![\p{{L}}\p{{N}}])", Opts);
+        string result = rx.Replace(text, m => map.TryGetValue(Key(m.Value), out var to) ? to : m.Value);
+        return Regex.Replace(result, @" {2,}", " ").Trim();
+    }
+
     public static int CountWords(string s) =>
         string.IsNullOrWhiteSpace(s) ? 0 : Regex.Matches(s, @"[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*").Count;
 

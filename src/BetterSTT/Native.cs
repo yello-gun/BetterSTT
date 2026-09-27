@@ -312,6 +312,98 @@ public static class TextInjector
     static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 }
 
+/// <summary>An app you dictate into: its process name (for matching profiles) and a friendly name.</summary>
+public sealed record AppInfo(string ProcessName, string DisplayName);
+
+public static class ForegroundApp
+{
+    /// <summary>The app that currently has focus, or null for BetterSTT itself or when it can't be identified.</summary>
+    public static AppInfo? Current()
+    {
+        try
+        {
+            GetWindowThreadProcessId(GetForegroundWindow(), out uint pid);
+            if (pid == 0 || pid == (uint)Environment.ProcessId) return null;
+            return Describe((int)pid);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Uses only limited query rights, so it also works for apps running as administrator.</summary>
+    public static AppInfo? Describe(int pid)
+    {
+        IntPtr process = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, (uint)pid);
+        if (process == IntPtr.Zero) return null;
+        try
+        {
+            var buffer = new System.Text.StringBuilder(1024);
+            int size = buffer.Capacity;
+            if (!QueryFullProcessImageName(process, 0, buffer, ref size)) return null;
+            string path = buffer.ToString();
+            string name = Path.GetFileNameWithoutExtension(path);
+            string? description = null;
+            try { description = System.Diagnostics.FileVersionInfo.GetVersionInfo(path).FileDescription; } catch { /* no version info */ }
+            return new AppInfo(name, string.IsNullOrWhiteSpace(description) ? name : description.Trim());
+        }
+        finally
+        {
+            CloseHandle(process);
+        }
+    }
+
+    /// <summary>Apps that currently have a titled, visible window, for picking one to add a profile for.</summary>
+    public static IReadOnlyList<AppInfo> WithWindows() =>
+        System.Diagnostics.Process.GetProcesses()
+            .Where(p =>
+            {
+                try
+                {
+                    return p.Id != Environment.ProcessId
+                        && p.MainWindowHandle != IntPtr.Zero
+                        && IsWindowVisible(p.MainWindowHandle)
+                        && !string.IsNullOrWhiteSpace(p.MainWindowTitle)
+                        && !HiddenProcesses.Contains(p.ProcessName);
+                }
+                catch
+                {
+                    return false;
+                }
+            })
+            .Select(p => { try { return Describe(p.Id); } catch { return null; } })
+            .OfType<AppInfo>()
+            .DistinctBy(a => a.ProcessName, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(a => a.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+    [DllImport("user32.dll")]
+    static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr OpenProcess(uint access, bool inherit, uint processId);
+
+    [DllImport("kernel32.dll")]
+    static extern bool CloseHandle(IntPtr handle);
+
+    // Windows background hosts that can own a window but aren't apps you type into.
+    static readonly HashSet<string> HiddenProcesses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "svchost", "ApplicationFrameHost", "TextInputHost", "ShellExperienceHost", "SearchHost", "StartMenuExperienceHost",
+        "SystemSettings", "LockApp", "dwm", "explorer",
+    };
+
+    [DllImport("user32.dll")]
+    static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool QueryFullProcessImageName(IntPtr process, int flags, System.Text.StringBuilder name, ref int size);
+}
+
 public static class StartupRegistration
 {
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";

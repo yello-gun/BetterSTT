@@ -32,6 +32,9 @@ public partial class App : Application
 
     public static DictationController Controller => ((App)Current)._controller!;
 
+    /// <summary>The on-screen pill, for the position preview in settings (null in screenshot mode).</summary>
+    public static OverlayWindow? Overlay => ((App)Current)._overlay;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);

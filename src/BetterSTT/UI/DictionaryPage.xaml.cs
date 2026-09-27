@@ -1,0 +1,100 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using Wpf.Ui.Controls;
+using Button = Wpf.Ui.Controls.Button;
+
+namespace BetterSTT.UI;
+
+public partial class DictionaryPage : Page
+{
+    readonly DictationController _c = App.Controller;
+
+    public DictionaryPage()
+    {
+        InitializeComponent();
+        FromBox.KeyDown += OnEnter;
+        ToBox.KeyDown += OnEnter;
+        Loaded += (_, _) => Refresh();
+    }
+
+    void OnEnter(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        OnAdd(sender, e);
+    }
+
+    void OnAdd(object sender, RoutedEventArgs e)
+    {
+        string? problem = AddFix(_c, FromBox.Text, ToBox.Text);
+        AddError.Text = problem ?? "";
+        AddError.Visibility = problem == null ? Visibility.Collapsed : Visibility.Visible;
+        if (problem != null) return;
+        FromBox.Text = ToBox.Text = "";
+        FromBox.Focus();
+        Refresh();
+    }
+
+    /// <summary>Adds (or updates) a word fix. Returns why it can't be added, or null. Shared with Home.</summary>
+    public static string? AddFix(DictationController c, string from, string to)
+    {
+        from = from.Trim();
+        to = to.Trim();
+        if (from.Length == 0 || to.Length == 0) return "Fill in both what it heard and what it should type.";
+        if (string.Equals(from, to, StringComparison.Ordinal)) return "The two spellings are the same.";
+
+        c.Update(s =>
+        {
+            var existing = s.Replacements.FirstOrDefault(r => string.Equals(r.From.Trim(), from, StringComparison.OrdinalIgnoreCase));
+            if (existing != null) existing.To = to;
+            else s.Replacements.Add(new Replacement { From = from, To = to });
+        });
+        return null;
+    }
+
+    void Refresh()
+    {
+        List.Children.Clear();
+        var fixes = _c.Settings.Replacements;
+        EmptyText.Visibility = fixes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        CountText.Text = fixes.Count == 1 ? "1 fix" : $"{fixes.Count} fixes";
+
+        foreach (var fix in fixes.OrderBy(r => r.To, StringComparer.CurrentCultureIgnoreCase).ToList())
+        {
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var from = Theme.Text(fix.From, 14, Theme.TextSecondary);
+            from.VerticalAlignment = VerticalAlignment.Center;
+            var arrow = new SymbolIcon { Symbol = SymbolRegular.ArrowRight24, Margin = new Thickness(12, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
+            arrow.SetResourceReference(ForegroundProperty, Theme.TextSecondary);
+            var to = Theme.Text(fix.To, 14, weight: FontWeights.SemiBold);
+            to.VerticalAlignment = VerticalAlignment.Center;
+            var remove = new Button
+            {
+                Icon = new SymbolIcon { Symbol = SymbolRegular.Delete24 },
+                Appearance = ControlAppearance.Transparent,
+                ToolTip = "Remove this fix",
+            };
+            System.Windows.Automation.AutomationProperties.SetName(remove, $"Remove fix {fix.From} to {fix.To}");
+            remove.Click += (_, _) =>
+            {
+                _c.Update(s => s.Replacements.RemoveAll(r => r.From == fix.From && r.To == fix.To));
+                Refresh();
+            };
+
+            Grid.SetColumn(arrow, 1);
+            Grid.SetColumn(to, 2);
+            Grid.SetColumn(remove, 3);
+            row.Children.Add(from);
+            row.Children.Add(arrow);
+            row.Children.Add(to);
+            row.Children.Add(remove);
+            List.Children.Add(new Border { Child = row, Style = (Style)FindResource("Card"), Padding = new Thickness(20, 8, 12, 8) });
+        }
+    }
+}

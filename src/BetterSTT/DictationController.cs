@@ -49,10 +49,12 @@ public sealed class DictationController : IDisposable
     DateTime _recordingStarted;
     DateTime _lastUsed = DateTime.Now;
     string? _spoolPath;
+    AppInfo? _target;
 
     public DictationController(AppSettings settings, HistoryStore? history = null)
     {
         Settings = settings;
+        ActiveSettings = settings.Clone();
         History = history ?? HistoryStore.Load();
         _startedWithGpu = settings.UseGpu;
         try { Settings.StartWithWindows = StartupRegistration.IsEnabled(); } catch { /* registry unavailable */ }
@@ -77,6 +79,16 @@ public sealed class DictationController : IDisposable
     }
 
     public AppSettings Settings { get; }
+
+    /// <summary>
+    /// The settings for the dictation in progress (or the last one): <see cref="Settings"/> with the
+    /// target app's profile applied.
+    /// </summary>
+    public AppSettings ActiveSettings { get; private set; }
+
+    /// <summary>The app the current (or last) dictation is going into, if known.</summary>
+    public AppInfo? TargetApp => _target;
+
     public HistoryStore History { get; }
     public DictationState State { get; private set; }
     public ModelState ModelState { get; private set; } = ModelState.Loading;
@@ -339,6 +351,9 @@ public sealed class DictationController : IDisposable
 
     bool StartRecording()
     {
+        // Captured now, while the target still has focus; its profile applies to this dictation.
+        _target = ForegroundApp.Current();
+        ActiveSettings = Settings.ForApp(_target?.ProcessName);
         _spoolPath = PendingAudio.NewPath();
         try
         {
@@ -438,37 +453,37 @@ public sealed class DictationController : IDisposable
 
     async Task<DictationOutcome> TranscribeAndDeliverAsync(float[] samples)
     {
-        var result = await TranscribeAsync(samples);
+        var settings = ActiveSettings;
+        var result = await TranscribeAsync(samples, settings);
         if (result == null) return new DictationOutcome(OutcomeKind.NoSpeech);
         var (raw, clean) = result.Value;
         if (clean.Length == 0) return new DictationOutcome(OutcomeKind.Empty);
 
-        var item = History.Add(raw, clean);
+        var item = History.Add(raw, clean, _target);
         Log.Write($"Dictation: {LastAudioSeconds:F1} s audio, {LastTranscribeSeconds:F2} s to transcribe, {item.WordsRemoved} words removed");
 
-        var kind = await DeliverAsync(Settings.AddTrailingSpace ? clean + " " : clean, clean);
+        var kind = await DeliverAsync(settings.AddTrailingSpace ? clean + " " : clean, clean, settings);
         return new DictationOutcome(kind, item);
     }
 
     /// <returns>Null when there was no speech in the recording.</returns>
-    async Task<(string Raw, string Clean)?> TranscribeAsync(float[] samples)
+    async Task<(string Raw, string Clean)?> TranscribeAsync(float[] samples, AppSettings settings)
     {
         var audio = AudioPrep.Prepare(samples);
         if (audio == null) return null;
 
         await EnsureModelReadyAsync();
 
-        var settings = Settings.Clone();
         var timer = Stopwatch.StartNew();
         string raw = await Task.Run(() => _transcriber.TranscribeAsync(audio, settings, CancellationToken.None));
         LastTranscribeSeconds = timer.Elapsed.TotalSeconds;
         LastAudioSeconds = audio.Length / (double)AudioRecorder.SampleRate;
         _lastUsed = DateTime.Now;
-        return (raw, TextCleaner.Clean(raw, settings.Cleanup));
+        return (raw, TextCleaner.Process(raw, settings.Cleanup, settings.Replacements));
     }
 
     /// <summary>Types or pastes the text, falling back to the clipboard where typing can't reach.</summary>
-    async Task<OutcomeKind> DeliverAsync(string text, string clipboardText)
+    async Task<OutcomeKind> DeliverAsync(string text, string clipboardText, AppSettings settings)
     {
         // Started from BetterSTT's own window (or it has focus): there is nothing to paste into.
         if (TextInjector.IsOwnWindowFocused())
@@ -479,13 +494,16 @@ public sealed class DictationController : IDisposable
         if (TextInjector.IsForegroundBlocked())
         {
             TextInjector.SetClipboard(clipboardText);
-            if (!Settings.ShowOverlay)
+            if (!settings.ShowOverlay)
                 Notice?.Invoke("That window is running as administrator, so it blocks typing from other apps. Your text is on the clipboard; press Ctrl+V.", false);
             return OutcomeKind.Blocked;
         }
-        await TextInjector.InjectAsync(text, Settings);
+        await TextInjector.InjectAsync(text, settings);
         return OutcomeKind.Pasted;
     }
+
+    /// <summary>Turns cleanup off (type exactly what was heard) or back on.</summary>
+    public void ToggleExactWords() => Update(s => s.Cleanup.Enabled = !s.Cleanup.Enabled);
 
     // ---- paste last / recovery ----
 
@@ -498,7 +516,10 @@ public sealed class DictationController : IDisposable
             return;
         }
 
-        var kind = await DeliverAsync(Settings.AddTrailingSpace ? last.Clean + " " : last.Clean, last.Clean);
+        _target = ForegroundApp.Current();
+        ActiveSettings = Settings.ForApp(_target?.ProcessName);
+        var settings = ActiveSettings;
+        var kind = await DeliverAsync(settings.AddTrailingSpace ? last.Clean + " " : last.Clean, last.Clean, settings);
         Finish(new DictationOutcome(kind == OutcomeKind.Pasted ? OutcomeKind.PastedLast : kind, last));
     }
 
@@ -510,13 +531,16 @@ public sealed class DictationController : IDisposable
             Sounds.Error();
             return;
         }
+        // The app a saved recording was meant for is unknown, so the general settings apply.
+        _target = null;
+        ActiveSettings = Settings.Clone();
         State = DictationState.Transcribing;
         StateChanged?.Invoke();
 
         DictationOutcome outcome;
         try
         {
-            var result = await TranscribeAsync(PendingAudio.Read(path));
+            var result = await TranscribeAsync(PendingAudio.Read(path), ActiveSettings);
             if (result == null)
             {
                 outcome = new DictationOutcome(OutcomeKind.NoSpeech);

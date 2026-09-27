@@ -9,6 +9,9 @@ public sealed class RecentDictation
     public string Raw { get; set; } = "";
     public string Clean { get; set; } = "";
     public int WordsRemoved { get; set; }
+    /// <summary>Where it was dictated into (null when unknown, e.g. a recovered recording).</summary>
+    public string? AppProcess { get; set; }
+    public string? AppName { get; set; }
 }
 
 /// <summary>Lifetime stats plus the last few dictations, stored locally in history.json.</summary>
@@ -32,10 +35,10 @@ public sealed class HistoryStore
         WordsRemoved = 1284,
         Recent =
         [
-            new() { Time = DateTime.Now.AddMinutes(-2), WordsRemoved = 4,
+            new() { Time = DateTime.Now.AddMinutes(-2), WordsRemoved = 4, AppProcess = "Discord", AppName = "Discord",
                 Raw = "Um, so I was thinking, uh, that we should, like, try the the new approach.",
                 Clean = "So I was thinking that we should try the new approach." },
-            new() { Time = DateTime.Now.AddMinutes(-18), WordsRemoved = 3,
+            new() { Time = DateTime.Now.AddMinutes(-18), WordsRemoved = 3, AppProcess = "claude", AppName = "Claude",
                 Raw = "Hmm. Can you, you know, rewrite this function to use async?",
                 Clean = "Can you rewrite this function to use async?" },
             new() { Time = DateTime.Now.AddHours(-1), WordsRemoved = 1,
@@ -61,13 +64,15 @@ public sealed class HistoryStore
         return new HistoryStore();
     }
 
-    public RecentDictation Add(string raw, string clean)
+    public RecentDictation Add(string raw, string clean, AppInfo? app = null)
     {
         var item = new RecentDictation
         {
             Time = DateTime.Now,
             Raw = raw,
             Clean = clean,
+            AppProcess = app?.ProcessName,
+            AppName = app?.DisplayName,
             WordsRemoved = Math.Max(0, TextCleaner.CountWords(raw) - TextCleaner.CountWords(clean)),
         };
         Recent.Insert(0, item);

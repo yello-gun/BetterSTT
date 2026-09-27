@@ -125,6 +125,24 @@
         <TextBlock Style="{StaticResource SectionTitle}" Text="Behavior" />
         <StackPanel x:Name="Toggles" />
 
+        <Border Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Body}" Text="Indicator position" />
+                    <TextBlock Margin="0,2,0,0" Style="{StaticResource Caption}" Text="Where the listening pill appears. It can also be hidden for specific apps on the Apps page." />
+                </StackPanel>
+                <ComboBox x:Name="PositionBox" Grid.Column="1" MinWidth="150" Margin="16,0,8,0" AutomationProperties.Name="Indicator position" />
+                <ComboBox x:Name="ScreenBox" Grid.Column="2" MinWidth="170" Margin="0,0,8,0" AutomationProperties.Name="Indicator screen" />
+                <ui:Button Grid.Column="3" Click="OnPreviewOverlay" Content="Preview" Icon="{ui:SymbolIcon Eye24}" />
+            </Grid>
+        </Border>
+
         <Grid Margin="0,16,0,0">
             <TextBlock x:Name="AboutText" VerticalAlignment="Center" Style="{StaticResource Caption}" />
             <ui:Button HorizontalAlignment="Right" Appearance="Transparent" Click="OnOpenData" Content="Open data folder" />

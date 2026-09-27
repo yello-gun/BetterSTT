@@ -73,9 +73,24 @@ public partial class OverlayWindow : Window
         _hideTimer.Stop();
     }
 
+    /// <summary>Shows the listening pill for a few seconds where it's configured to appear.</summary>
+    public void ShowPreview()
+    {
+        _palette = IsDarkTheme() ? Dark : Light;
+        ShowListening();
+        _clock.Stop();
+        var rnd = new Random();
+        foreach (var bar in _bars) bar.Height = 4 + rnd.NextDouble() * 18;
+        DetailText.Text = "0:07";
+        _hideTimer.Stop();
+        _hideTimer.Interval = TimeSpan.FromSeconds(3);
+        _hideTimer.Start();
+    }
+
     void OnStateChanged()
     {
-        if (!_c.Settings.ShowOverlay)
+        // ActiveSettings carries the target app's profile, which can hide the pill for that app.
+        if (!_c.ActiveSettings.ShowOverlay)
         {
             Hide();
             return;
@@ -90,7 +105,7 @@ public partial class OverlayWindow : Window
 
     void OnFinished(DictationOutcome outcome)
     {
-        if (!_c.Settings.ShowOverlay) return;
+        if (!_c.ActiveSettings.ShowOverlay) return;
         var showFor = TimeSpan.FromMilliseconds(1600);
         switch (outcome.Kind)
         {
@@ -226,14 +241,30 @@ public partial class OverlayWindow : Window
         _bars[^1].Height = 4 + Math.Min(1.0, level * 4) * 18;
     }
 
+    /// <summary>Shows the pill at the configured edge of the chosen screen (the window's margin holds its shadow).</summary>
     void ShowAtBottom()
     {
         if (!IsVisible) Show();
         UpdateLayout();
-        var area = System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Cursor.Position).WorkingArea;
+        var screen = _c.Settings.OverlayOnPrimaryScreen
+            ? System.Windows.Forms.Screen.PrimaryScreen!
+            : System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Cursor.Position);
+        var area = screen.WorkingArea;
         var dpi = VisualTreeHelper.GetDpi(this);
-        Left = area.Left / dpi.DpiScaleX + (area.Width / dpi.DpiScaleX - ActualWidth) / 2;
-        Top = area.Bottom / dpi.DpiScaleY - ActualHeight - 24;
+        double left = area.Left / dpi.DpiScaleX, top = area.Top / dpi.DpiScaleY;
+        double width = area.Width / dpi.DpiScaleX, height = area.Height / dpi.DpiScaleY;
+        const double edge = 8;
+
+        var position = _c.Settings.OverlayPosition;
+        Left = position switch
+        {
+            OverlayPosition.BottomLeft or OverlayPosition.TopLeft => left + edge,
+            OverlayPosition.BottomRight or OverlayPosition.TopRight => left + width - ActualWidth - edge,
+            _ => left + (width - ActualWidth) / 2,
+        };
+        Top = position is OverlayPosition.TopCenter or OverlayPosition.TopLeft or OverlayPosition.TopRight
+            ? top + edge
+            : top + height - ActualHeight - 24;
     }
 
     static bool IsDarkTheme()
