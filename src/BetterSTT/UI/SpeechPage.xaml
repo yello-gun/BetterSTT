@@ -36,6 +36,20 @@
         </Grid>
         <StackPanel x:Name="ModelList" />
 
+        <Border Margin="0,4,0,4" Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Body}" Text="Free memory when idle" />
+                    <TextBlock Margin="0,2,0,0" Style="{StaticResource Caption}" Text="Unloads the model after a while without dictating. The next dictation takes a second or two longer while it reloads." />
+                </StackPanel>
+                <ComboBox x:Name="UnloadBox" Grid.Column="1" MinWidth="200" Margin="16,0,0,0" AutomationProperties.Name="Free memory when idle" />
+            </Grid>
+        </Border>
+
         <TextBlock Style="{StaticResource SectionTitle}" Text="Recognition" />
         <Border Style="{StaticResource Card}">
             <Grid>

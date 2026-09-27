@@ -28,6 +28,13 @@ public partial class SpeechPage : Page
             if (!_building && LanguageBox.SelectedItem is LanguageItem l) _c.Update(s => s.Language = l.Code);
         };
 
+        foreach (var (_, label) in UnloadOptions) UnloadBox.Items.Add(label);
+        UnloadBox.SelectionChanged += (_, _) =>
+        {
+            if (!_building && UnloadBox.SelectedIndex >= 0)
+                _c.Update(s => s.UnloadModelAfterMinutes = UnloadOptions[UnloadBox.SelectedIndex].Minutes);
+        };
+
         _vocabSave.Tick += (_, _) => { _vocabSave.Stop(); SaveVocabulary(); };
         VocabularyBox.TextChanged += (_, _) => { if (!_building) { _vocabSave.Stop(); _vocabSave.Start(); } };
         VocabularyBox.LostFocus += (_, _) => SaveVocabulary();
@@ -56,9 +63,16 @@ public partial class SpeechPage : Page
         LanguageBox.SelectedItem = languages.FirstOrDefault(l => l.Code == _c.Settings.Language)
                                    ?? new LanguageItem(_c.Settings.Language, _c.Settings.Language);
         VocabularyBox.Text = _c.Settings.Vocabulary;
+        int unload = _c.Settings.UnloadModelAfterMinutes;
+        UnloadBox.SelectedIndex = Array.IndexOf(UnloadOptions, UnloadOptions.MinBy(o => Math.Abs(o.Minutes - unload)));
         _building = false;
         Refresh();
     }
+
+    static readonly (int Minutes, string Label)[] UnloadOptions =
+    [
+        (0, "Never (always instant)"), (15, "After 15 minutes"), (30, "After 30 minutes"), (60, "After 1 hour"), (120, "After 2 hours"),
+    ];
 
     void Refresh()
     {
@@ -80,6 +94,10 @@ public partial class SpeechPage : Page
                     ? $"{device} · last dictation: {_c.LastAudioSeconds:F1} s of speech in {_c.LastTranscribeSeconds:F2} s"
                     : device;
                 break;
+            case ModelState.Sleeping:
+                EngineTitle.Text = "Model asleep to save memory";
+                EngineDetail.Text = "It reloads automatically when you start dictating, which takes a second or two.";
+                break;
             case ModelState.Downloading:
                 EngineTitle.Text = "Downloading the speech model…";
                 EngineDetail.Text = $"{_c.DownloadedMb} MB so far. This happens once per model.";
@@ -97,6 +115,7 @@ public partial class SpeechPage : Page
         string tone = _c.ModelState switch
         {
             ModelState.Ready => gpu ? Theme.Success : Theme.TextSecondary,
+            ModelState.Sleeping => Theme.TextSecondary,
             ModelState.Failed => Theme.Critical,
             _ => Theme.Caution,
         };

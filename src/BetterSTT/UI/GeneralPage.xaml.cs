@@ -12,7 +12,8 @@ public partial class GeneralPage : Page
 {
     readonly DictationController _c = App.Controller;
     readonly LevelMonitor _monitor = new();
-    bool _building, _capturing;
+    bool _building;
+    HotkeyTarget? _capturing;
     Window? _window;
     float _level;
 
@@ -44,6 +45,15 @@ public partial class GeneralPage : Page
         };
         _monitor.LevelChanged += level => Dispatcher.BeginInvoke(() => ShowLevel(level));
 
+        foreach (var (_, label) in TailOptions) TailBox.Items.Add(label);
+        TailBox.SelectionChanged += (_, _) =>
+        {
+            if (_building || TailBox.SelectedIndex < 0) return;
+            _c.Update(s => s.TailCaptureMs = TailOptions[TailBox.SelectedIndex].Ms);
+        };
+        PasteLastSwitch.Checked += (_, _) => { if (!_building) _c.Update(s => s.PasteLastEnabled = true); };
+        PasteLastSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.PasteLastEnabled = false); };
+
         var version = typeof(GeneralPage).Assembly.GetName().Version;
         AboutText.Text = $"BetterSTT {version?.ToString(3)} · Settings and models are stored in %LOCALAPPDATA%\\BetterSTT";
 
@@ -73,6 +83,11 @@ public partial class GeneralPage : Page
         catch { /* no audio subsystem */ }
         int index = _c.Settings.MicrophoneDevice + 1;
         MicBox.SelectedIndex = index >= 0 && index < MicBox.Items.Count ? index : 0;
+
+        // Nearest listed option to the saved value.
+        int tail = _c.Settings.TailCaptureMs;
+        TailBox.SelectedIndex = Array.IndexOf(TailOptions, TailOptions.MinBy(o => Math.Abs(o.Ms - tail)));
+        PasteLastSwitch.IsChecked = _c.Settings.PasteLastEnabled;
         _building = false;
 
         RefreshShortcut();
@@ -104,39 +119,78 @@ public partial class GeneralPage : Page
         return new Border { Child = grid, Style = (Style)FindResource("Card") };
     }
 
-    // ---- shortcut ----
+    // ---- shortcuts ----
 
     void RefreshShortcut()
     {
-        if (_capturing) return;
+        if (_capturing != null) return;
+        bool hold = _c.Settings.Activation == ActivationMode.Hold;
+
         ShortcutKeys.Content = Theme.Keycaps(_c.Settings.Hotkey, 13);
         ChangeButton.Content = "Change";
-        ShortcutHint.Text = _c.HotkeyRegistered
-            ? "Press once to start listening, press again to stop and paste."
-            : "Another app is using this shortcut. Choose a different one.";
+        ShortcutHint.Text = !_c.HotkeyRegistered
+            ? "Another app is using this shortcut. Choose a different one."
+            : hold
+                ? "Hold it down while you speak, let go to paste. Esc cancels."
+                : "Press once to start listening, press again to stop and paste. Esc cancels.";
         ShortcutHint.SetResourceReference(TextBlock.ForegroundProperty, _c.HotkeyRegistered ? Theme.TextSecondary : Theme.Critical);
+
+        ToggleModeButton.Appearance = hold ? ControlAppearance.Transparent : ControlAppearance.Primary;
+        HoldModeButton.Appearance = hold ? ControlAppearance.Primary : ControlAppearance.Transparent;
+        ActivationHint.Text = hold
+            ? "Hold the shortcut while you talk, like a walkie-talkie."
+            : "Press to start listening, press again to stop.";
+
+        bool pasteLastOn = _c.Settings.PasteLastEnabled;
+        PasteLastKeys.Content = Theme.Keycaps(_c.Settings.PasteLastHotkey, 13);
+        PasteLastKeys.Opacity = PasteLastChangeButton.Opacity = pasteLastOn ? 1 : 0.4;
+        PasteLastChangeButton.IsEnabled = pasteLastOn;
+        PasteLastChangeButton.Content = "Change";
+        bool pasteLastBroken = pasteLastOn && !_c.PasteLastRegistered;
+        PasteLastHint.Text = pasteLastBroken
+            ? "Another app is using this shortcut. Choose a different one."
+            : "Types your most recent dictation again, e.g. if it landed in the wrong window.";
+        PasteLastHint.SetResourceReference(TextBlock.ForegroundProperty, pasteLastBroken ? Theme.Critical : Theme.TextSecondary);
     }
 
-    void OnChangeShortcut(object sender, RoutedEventArgs e)
+    void OnToggleMode(object sender, RoutedEventArgs e) => _c.Update(s => s.Activation = ActivationMode.Toggle);
+
+    void OnHoldMode(object sender, RoutedEventArgs e) => _c.Update(s => s.Activation = ActivationMode.Hold);
+
+    void OnChangeShortcut(object sender, RoutedEventArgs e) => BeginCapture(HotkeyTarget.Dictate);
+
+    void OnChangePasteLast(object sender, RoutedEventArgs e) => BeginCapture(HotkeyTarget.PasteLast);
+
+    (ContentControl Keys, TextBlock Hint, Wpf.Ui.Controls.Button Button) CaptureUi(HotkeyTarget target) =>
+        target == HotkeyTarget.Dictate
+            ? (ShortcutKeys, ShortcutHint, ChangeButton)
+            : (PasteLastKeys, PasteLastHint, PasteLastChangeButton);
+
+    void BeginCapture(HotkeyTarget target)
     {
-        if (_capturing)
+        if (_capturing != null)
         {
+            // Clicking "Cancel", or Change on the other shortcut, ends the current capture.
+            bool same = _capturing == target;
             EndCapture();
             RefreshShortcut();
-            return;
+            if (same) return;
         }
-        _capturing = true;
-        _c.SuspendHotkey(); // only paused while recording the new combination
-        ChangeButton.Content = "Cancel";
-        ShortcutKeys.Content = Theme.Text("Press the new shortcut…", 14, Theme.TextSecondary);
-        ShortcutHint.Text = "Use at least one of Ctrl, Alt, Shift or Win, plus a key. Esc cancels.";
-        ShortcutHint.SetResourceReference(TextBlock.ForegroundProperty, Theme.TextSecondary);
+        _capturing = target;
+        _c.SuspendHotkey(); // shortcuts pause only while the new combination is being pressed
+        var (keys, hint, button) = CaptureUi(target);
+        button.Content = "Cancel";
+        keys.Content = Theme.Text("Press the new shortcut…", 14, Theme.TextSecondary);
+        hint.Text = "Use at least one of Ctrl, Alt, Shift or Win, plus a key. Esc cancels.";
+        hint.SetResourceReference(TextBlock.ForegroundProperty, Theme.TextSecondary);
         if (_window != null) _window.PreviewKeyDown += OnCaptureKey;
     }
 
     void OnCaptureKey(object sender, KeyEventArgs e)
     {
+        if (_capturing is not { } target) return;
         e.Handled = true;
+        var (_, hint, _) = CaptureUi(target);
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift
             or Key.LWin or Key.RWin or Key.ImeProcessed or Key.DeadCharProcessed)
@@ -154,7 +208,7 @@ public partial class GeneralPage : Page
         bool isFunctionKey = key is >= Key.F1 and <= Key.F24;
         if (mods == ModifierKeys.None && !isFunctionKey)
         {
-            ShortcutHint.Text = "Add Ctrl, Alt, Shift or Win so normal typing isn't captured.";
+            hint.Text = "Add Ctrl, Alt, Shift or Win so normal typing isn't captured.";
             return;
         }
 
@@ -167,10 +221,10 @@ public partial class GeneralPage : Page
             Win = mods.HasFlag(ModifierKeys.Windows),
         };
 
-        if (!_c.TrySetHotkey(binding))
+        if (_c.TrySetHotkey(target, binding) is { } problem)
         {
-            ShortcutHint.Text = $"{binding} is already used by another app. Try another combination.";
-            ShortcutHint.SetResourceReference(TextBlock.ForegroundProperty, Theme.Critical);
+            hint.Text = problem;
+            hint.SetResourceReference(TextBlock.ForegroundProperty, Theme.Critical);
             return;
         }
         EndCapture();
@@ -179,15 +233,22 @@ public partial class GeneralPage : Page
 
     void EndCapture()
     {
-        if (!_capturing) return;
-        _capturing = false;
+        if (_capturing == null) return;
+        _capturing = null;
         if (_window != null) _window.PreviewKeyDown -= OnCaptureKey;
         _c.ResumeHotkey();
     }
 
+    // ---- tail capture ----
+
+    static readonly (int Ms, string Label)[] TailOptions =
+    [
+        (0, "Off"), (200, "0.2 seconds"), (300, "0.3 seconds (recommended)"), (500, "0.5 seconds"), (800, "0.8 seconds"),
+    ];
+
     void OnWindowDeactivated(object? sender, EventArgs e)
     {
-        if (!_capturing) return;
+        if (_capturing == null) return;
         EndCapture();
         RefreshShortcut();
     }

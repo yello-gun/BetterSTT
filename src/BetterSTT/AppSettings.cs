@@ -7,6 +7,9 @@ namespace BetterSTT;
 
 public enum OutputMethod { Paste, Type }
 
+/// <summary>Toggle: press to start, press again to stop. Hold: record while the shortcut is held down.</summary>
+public enum ActivationMode { Toggle, Hold }
+
 public static class AppPaths
 {
     public static string Data { get; } =
@@ -14,6 +17,8 @@ public static class AppPaths
     public static string SettingsFile => Path.Combine(Data, "settings.json");
     public static string Models => Path.Combine(Data, "models");
     public static string LogFile => Path.Combine(Data, "log.txt");
+    /// <summary>Recordings not yet transcribed; see <see cref="PendingAudio"/>.</summary>
+    public static string Pending => Path.Combine(Data, "pending");
 
     /// <summary>Earlier names of the app, newest first: BetterTTS (2.1), CleanDictate (1.0–2.0).</summary>
     static readonly string[] OldNames = ["BetterTTS", "CleanDictate"];
@@ -174,6 +179,14 @@ public sealed class AppSettings
     ];
 
     public HotkeyBinding Hotkey { get; set; } = new();
+    public ActivationMode Activation { get; set; } = ActivationMode.Toggle;
+    /// <summary>Keeps recording this long after you stop, so the last word isn't clipped.</summary>
+    public int TailCaptureMs { get; set; } = 300;
+    public bool PasteLastEnabled { get; set; } = true;
+    // Not Ctrl+Alt+V: that is Paste Special in Office.
+    public HotkeyBinding PasteLastHotkey { get; set; } = new() { Key = Keys.V, Ctrl = true, Alt = true, Shift = true };
+    /// <summary>Frees the model's memory after this many idle minutes; 0 keeps it loaded.</summary>
+    public int UnloadModelAfterMinutes { get; set; }
     public int MicrophoneDevice { get; set; } = -1; // -1 = Windows default
     public OutputMethod OutputMethod { get; set; } = OutputMethod.Paste;
     public bool RestoreClipboard { get; set; } = true;

@@ -25,6 +25,57 @@
         </Border>
 
         <Border Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Body}" Text="How the shortcut works" />
+                    <TextBlock x:Name="ActivationHint" Margin="0,2,0,0" Style="{StaticResource Caption}" />
+                </StackPanel>
+                <Border Grid.Column="1" Padding="2" Background="{DynamicResource SubtleFillColorSecondaryBrush}" CornerRadius="6">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:Button x:Name="ToggleModeButton" MinWidth="110" Click="OnToggleMode" Content="Press to start" />
+                        <ui:Button x:Name="HoldModeButton" MinWidth="110" Margin="2,0,0,0" Click="OnHoldMode" Content="Hold to talk" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Border Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Body}" Text="Paste last dictation" />
+                    <TextBlock x:Name="PasteLastHint" Margin="0,2,0,0" Style="{StaticResource Caption}" />
+                </StackPanel>
+                <ContentControl x:Name="PasteLastKeys" Grid.Column="1" Margin="16,0" VerticalAlignment="Center" />
+                <ui:Button x:Name="PasteLastChangeButton" Grid.Column="2" MinWidth="90" Margin="0,0,16,0" Click="OnChangePasteLast" Content="Change" />
+                <ui:ToggleSwitch x:Name="PasteLastSwitch" Grid.Column="3" VerticalAlignment="Center" AutomationProperties.Name="Paste last dictation shortcut" />
+            </Grid>
+        </Border>
+
+        <Border Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Body}" Text="Keep listening after you stop" />
+                    <TextBlock Margin="0,2,0,0" Style="{StaticResource Caption}" Text="Records a moment longer so your last word isn't cut off." />
+                </StackPanel>
+                <ComboBox x:Name="TailBox" Grid.Column="1" MinWidth="180" AutomationProperties.Name="Keep listening after you stop" />
+            </Grid>
+        </Border>
+
+        <Border Style="{StaticResource Card}">
             <StackPanel>
                 <Grid>
                     <Grid.ColumnDefinitions>

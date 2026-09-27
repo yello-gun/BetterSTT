@@ -4,17 +4,17 @@ using WinForms = System.Windows.Forms;
 
 namespace BetterSTT;
 
-/// <summary>Registers a system-wide hotkey via a hidden message-only window.</summary>
+/// <summary>Registers system-wide hotkeys via a hidden message-only window, each under its own id.</summary>
 public sealed class GlobalHotkey : IDisposable
 {
     const int WM_HOTKEY = 0x0312;
-    const int Id = 1;
     const uint MOD_ALT = 0x1, MOD_CONTROL = 0x2, MOD_SHIFT = 0x4, MOD_WIN = 0x8, MOD_NOREPEAT = 0x4000;
 
     readonly HwndSource _window;
-    bool _registered;
+    readonly HashSet<int> _registered = new();
 
-    public event Action? Pressed;
+    /// <summary>Raised with the id of the hotkey that was pressed.</summary>
+    public event Action<int>? Pressed;
 
     public GlobalHotkey()
     {
@@ -26,39 +26,59 @@ public sealed class GlobalHotkey : IDisposable
         _window.AddHook(WndProc);
     }
 
-    public bool Register(HotkeyBinding b)
+    public bool Register(int id, HotkeyBinding b)
     {
-        Unregister();
+        Unregister(id);
         uint mods = MOD_NOREPEAT;
         if (b.Ctrl) mods |= MOD_CONTROL;
         if (b.Alt) mods |= MOD_ALT;
         if (b.Shift) mods |= MOD_SHIFT;
         if (b.Win) mods |= MOD_WIN;
-        _registered = RegisterHotKey(_window.Handle, Id, mods, (uint)b.Key);
-        return _registered;
+        bool ok = RegisterHotKey(_window.Handle, id, mods, (uint)b.Key);
+        if (ok) _registered.Add(id);
+        return ok;
     }
 
-    public void Unregister()
+    public void Unregister(int id)
     {
-        if (_registered) UnregisterHotKey(_window.Handle, Id);
-        _registered = false;
+        if (_registered.Remove(id)) UnregisterHotKey(_window.Handle, id);
+    }
+
+    public void UnregisterAll()
+    {
+        foreach (int id in _registered.ToList()) Unregister(id);
+    }
+
+    /// <summary>Whether a combination is free, without keeping it registered.</summary>
+    public bool IsAvailable(HotkeyBinding b)
+    {
+        const int probeId = 0x7FFF;
+        bool ok = Register(probeId, b);
+        Unregister(probeId);
+        return ok;
     }
 
     IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (msg == WM_HOTKEY && wParam == Id)
+        if (msg == WM_HOTKEY)
         {
             handled = true;
-            Pressed?.Invoke();
+            Pressed?.Invoke(wParam.ToInt32());
         }
         return IntPtr.Zero;
     }
 
     public void Dispose()
     {
-        Unregister();
+        UnregisterAll();
         _window.Dispose();
     }
+
+    /// <summary>True while the key is physically held down (used for hold-to-talk).</summary>
+    public static bool IsKeyDown(WinForms.Keys key) => (GetAsyncKeyState((int)key) & 0x8000) != 0;
+
+    [DllImport("user32.dll")]
+    static extern short GetAsyncKeyState(int vKey);
 
     [DllImport("user32.dll", SetLastError = true)]
     static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -108,6 +128,89 @@ public static class TextInjector
         GetWindowThreadProcessId(GetForegroundWindow(), out uint pid);
         return pid == (uint)Environment.ProcessId;
     }
+
+    /// <summary>
+    /// True when the focused window belongs to a process running at a higher integrity level than
+    /// BetterSTT, typically an app started as administrator. Windows silently drops simulated
+    /// keystrokes sent to those windows (UIPI), so pasting there would lose the text.
+    /// </summary>
+    public static bool IsForegroundBlocked()
+    {
+        try
+        {
+            GetWindowThreadProcessId(GetForegroundWindow(), out uint pid);
+            if (pid == 0 || pid == (uint)Environment.ProcessId) return false;
+
+            int own = IntegrityOf(GetCurrentProcess()) ?? MediumIntegrity;
+            IntPtr process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+            if (process == IntPtr.Zero) return own < HighIntegrity; // can't even inspect it: protected or elevated
+            try
+            {
+                // An unreadable token also means it's elevated relative to us.
+                int target = IntegrityOf(process) ?? int.MaxValue;
+                return target > own;
+            }
+            finally
+            {
+                CloseHandle(process);
+            }
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    const int MediumIntegrity = 0x2000, HighIntegrity = 0x3000;
+    const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000, TOKEN_QUERY = 0x8;
+    const int TokenIntegrityLevel = 25;
+
+    static int? IntegrityOf(IntPtr process)
+    {
+        if (!OpenProcessToken(process, TOKEN_QUERY, out IntPtr token)) return null;
+        try
+        {
+            GetTokenInformation(token, TokenIntegrityLevel, IntPtr.Zero, 0, out int length);
+            if (length <= 0) return null;
+            IntPtr buffer = Marshal.AllocHGlobal(length);
+            try
+            {
+                if (!GetTokenInformation(token, TokenIntegrityLevel, buffer, length, out _)) return null;
+                IntPtr sid = Marshal.ReadIntPtr(buffer); // TOKEN_MANDATORY_LABEL.Label.Sid
+                int count = Marshal.ReadByte(GetSidSubAuthorityCount(sid));
+                return Marshal.ReadInt32(GetSidSubAuthority(sid, (uint)(count - 1)));
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+        finally
+        {
+            CloseHandle(token);
+        }
+    }
+
+    [DllImport("kernel32.dll")]
+    static extern IntPtr GetCurrentProcess();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr OpenProcess(uint access, bool inherit, uint processId);
+
+    [DllImport("kernel32.dll")]
+    static extern bool CloseHandle(IntPtr handle);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    static extern bool GetTokenInformation(IntPtr token, int infoClass, IntPtr info, int length, out int returnLength);
+
+    [DllImport("advapi32.dll")]
+    static extern IntPtr GetSidSubAuthorityCount(IntPtr sid);
+
+    [DllImport("advapi32.dll")]
+    static extern IntPtr GetSidSubAuthority(IntPtr sid, uint index);
 
     static WinForms.IDataObject? SnapshotClipboard()
     {

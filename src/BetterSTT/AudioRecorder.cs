@@ -11,6 +11,8 @@ public sealed class AudioRecorder : IDisposable
     readonly object _gate = new();
     WaveInEvent? _wave;
     TaskCompletionSource? _stopped;
+    WaveFileWriter? _spool;
+    int _buffersSinceFlush;
 
     /// <summary>Peak level of the latest buffer, 0..1. Raised on a background thread.</summary>
     public event Action<float>? LevelChanged;
@@ -20,10 +22,30 @@ public sealed class AudioRecorder : IDisposable
     public static IReadOnlyList<string> GetDevices() =>
         Enumerable.Range(0, WaveInEvent.DeviceCount).Select(i => WaveInEvent.GetCapabilities(i).ProductName).ToList();
 
-    public void Start(int deviceNumber)
+    /// <param name="spoolPath">
+    /// If given, the audio is also written to this WAV file as it arrives, so it survives a crash.
+    /// </param>
+    public void Start(int deviceNumber, string? spoolPath = null)
     {
         if (_wave != null) return;
-        lock (_gate) _samples.Clear();
+        lock (_gate)
+        {
+            _samples.Clear();
+            _spool = null;
+            if (spoolPath != null)
+            {
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(spoolPath)!);
+                    _spool = new WaveFileWriter(spoolPath, new WaveFormat(SampleRate, 16, 1));
+                    _buffersSinceFlush = 0;
+                }
+                catch (Exception ex)
+                {
+                    Log.Write($"Could not save the recording to disk, continuing in memory only: {ex.Message}");
+                }
+            }
+        }
 
         if (deviceNumber >= WaveInEvent.DeviceCount) deviceNumber = -1;
         var wave = new WaveInEvent
@@ -48,7 +70,12 @@ public sealed class AudioRecorder : IDisposable
         // Wait for the final buffers to flush (with a safety timeout).
         if (_stopped != null) await Task.WhenAny(_stopped.Task, Task.Delay(1000));
         wave.Dispose();
-        lock (_gate) return _samples.ToArray();
+        lock (_gate)
+        {
+            _spool?.Dispose(); // finalizes the WAV header
+            _spool = null;
+            return _samples.ToArray();
+        }
     }
 
     void OnData(object? sender, WaveInEventArgs e)
@@ -57,6 +84,25 @@ public sealed class AudioRecorder : IDisposable
         float peak = 0;
         lock (_gate)
         {
+            if (_spool != null)
+            {
+                try
+                {
+                    _spool.Write(e.Buffer, 0, e.BytesRecorded);
+                    // Flushing rewrites the header sizes; about once a second keeps a crash copy usable.
+                    if (++_buffersSinceFlush >= 20)
+                    {
+                        _spool.Flush();
+                        _buffersSinceFlush = 0;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Write($"Writing the recording to disk failed: {ex.Message}");
+                    _spool.Dispose();
+                    _spool = null;
+                }
+            }
             for (int i = 0; i < count; i++)
             {
                 float v = BitConverter.ToInt16(e.Buffer, i * 2) / 32768f;
@@ -72,6 +118,66 @@ public sealed class AudioRecorder : IDisposable
     {
         _wave?.Dispose();
         _wave = null;
+        lock (_gate)
+        {
+            _spool?.Dispose();
+            _spool = null;
+        }
+    }
+}
+
+/// <summary>
+/// Recordings waiting to be transcribed. Each dictation is written here while it's recorded and
+/// deleted once transcribed, so a crash or failed transcription never loses what was said.
+/// </summary>
+public static class PendingAudio
+{
+    public static string NewPath() =>
+        Path.Combine(AppPaths.Pending, $"dictation-{DateTime.Now:yyyyMMdd-HHmmss-fff}.wav");
+
+    /// <summary>Oldest first. <paramref name="except"/> skips the recording in progress.</summary>
+    public static IReadOnlyList<string> List(string? except = null)
+    {
+        if (!Directory.Exists(AppPaths.Pending)) return [];
+        return Directory.GetFiles(AppPaths.Pending, "dictation-*.wav")
+            .Where(p => !string.Equals(p, except, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    public static DateTime RecordedAt(string path) => File.GetCreationTime(path);
+
+    public static void Delete(string? path)
+    {
+        if (path == null) return;
+        try { File.Delete(path); }
+        catch (Exception ex) { Log.Write($"Could not delete {Path.GetFileName(path)}: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Reads a 16-bit mono recording. The data chunk is read to the end of the file rather than
+    /// trusting its size field, which is stale if the app crashed mid-recording.
+    /// </summary>
+    public static float[] Read(string path)
+    {
+        byte[] bytes = File.ReadAllBytes(path);
+        int pos = 12; // after "RIFF" <size> "WAVE"
+        while (pos + 8 <= bytes.Length)
+        {
+            string id = System.Text.Encoding.ASCII.GetString(bytes, pos, 4);
+            int size = BitConverter.ToInt32(bytes, pos + 4);
+            if (id == "data")
+            {
+                int start = pos + 8;
+                int count = (bytes.Length - start) / 2;
+                var samples = new float[count];
+                for (int i = 0; i < count; i++) samples[i] = BitConverter.ToInt16(bytes, start + i * 2) / 32768f;
+                return samples;
+            }
+            if (size < 0) break;
+            pos += 8 + size + (size & 1);
+        }
+        throw new InvalidDataException($"{Path.GetFileName(path)} has no audio data.");
     }
 }
 

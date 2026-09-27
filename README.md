@@ -11,6 +11,16 @@ Press **Ctrl + Alt + Space** in any app to start listening, and press it again t
   <img src="docs/screenshots/overlay-done-light.png" alt="Pasted confirmation" height="72">
 </p>
 
+## Built to be relied on
+
+- **Press or hold.** Press the shortcut to start and again to stop, or switch to hold-to-talk and speak while the keys are held down.
+- **Your last word isn't cut off.** It keeps listening for a moment after you stop (adjustable).
+- **Esc cancels** a dictation without typing anything.
+- **Nothing is lost.** Each recording is saved to disk while you speak. If the app crashes or transcription fails, the Home page offers to retry it.
+- **Paste last dictation** (Ctrl + Alt + Shift + V) types your most recent dictation again, for when it went to the wrong window.
+- **Admin windows are handled.** Windows blocks other apps from typing into programs running as administrator. BetterSTT detects this and puts the text on the clipboard instead of silently losing it.
+- **Light on memory if you want.** It can unload the speech model after a period of idle time, and reloads it when you next dictate.
+
 ## What gets removed
 
 Every rule can be switched off, and every word list can be edited, on the Cleanup page. It also has a live preview.
@@ -75,7 +85,7 @@ docs/screenshots/        images for this README (regenerate with --screenshots)
 
 BetterSTT doesn't collect or send any personal data. Audio and text never leave your PC. The only network connection is the one-time speech model download from Hugging Face. Details are in the [privacy policy](PRIVACY.md).
 
-Settings, the last 3 dictations (`history.json`), a log (timings and word counts only, never the dictated text) and downloaded models are stored in `%LOCALAPPDATA%\BetterSTT`. Uninstalling asks whether to delete them.
+Settings, the last 3 dictations (`history.json`), a log (timings, word counts and outcomes, never the dictated text), downloaded models and any not-yet-transcribed recording (`pending\`) are stored in `%LOCALAPPDATA%\BetterSTT`. Uninstalling asks whether to delete them.
 
 ## Code signing policy
 

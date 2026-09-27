@@ -46,6 +46,7 @@
                 <Rectangle x:Name="Separator" Width="1" Height="20" Margin="12,0" />
                 <StackPanel x:Name="Keys" VerticalAlignment="Center" Orientation="Horizontal" />
                 <TextBlock x:Name="StopText" Margin="2,0,0,0" VerticalAlignment="Center" FontSize="12" Text="to stop" />
+                <TextBlock x:Name="EscText" Margin="4,0,0,0" VerticalAlignment="Center" FontSize="12" Text="· Esc cancels" />
             </StackPanel>
         </StackPanel>
     </Border>

@@ -34,6 +34,7 @@ static class Theme
     public const string Success = "SystemFillColorSuccessBrush";
     public const string SuccessBackground = "SystemFillColorSuccessBackgroundBrush";
     public const string Caution = "SystemFillColorCautionBrush";
+    public const string CautionBackground = "SystemFillColorCautionBackgroundBrush";
     public const string ControlFill = "ControlFillColorDefaultBrush";
     public const string ControlStroke = "ControlStrokeColorDefaultBrush";
     public const string SubtleFill = "SubtleFillColorSecondaryBrush";
@@ -49,7 +50,7 @@ static class Theme
         DictationState.Transcribing => Caution,
         _ => c.ModelState switch
         {
-            ModelState.Ready => Success,
+            ModelState.Ready or ModelState.Sleeping => Success,
             ModelState.Failed => Critical,
             _ => Caution,
         },

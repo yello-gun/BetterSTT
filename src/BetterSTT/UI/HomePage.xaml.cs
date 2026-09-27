@@ -29,6 +29,7 @@ public partial class HomePage : Page
             _c.SettingsChanged += RefreshAll;
             _c.LevelChanged += OnLevel;
             _c.DictationFinished += OnFinished;
+            _c.PendingChanged += RefreshPending;
             RefreshAll();
         };
         Unloaded += (_, _) =>
@@ -38,6 +39,7 @@ public partial class HomePage : Page
             _c.SettingsChanged -= RefreshAll;
             _c.LevelChanged -= OnLevel;
             _c.DictationFinished -= OnFinished;
+            _c.PendingChanged -= RefreshPending;
             _clock.Stop();
         };
     }
@@ -45,14 +47,71 @@ public partial class HomePage : Page
     void RefreshAll()
     {
         RefreshStatus();
+        RefreshPending();
         RefreshStats();
         RefreshRecent();
+    }
+
+    /// <summary>Recordings that failed or were interrupted, each with Retry and Discard.</summary>
+    void RefreshPending()
+    {
+        PendingPanel.Children.Clear();
+        var pending = _c.PendingRecordings;
+        PendingPanel.Visibility = pending.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        if (pending.Count == 0) return;
+
+        var body = new StackPanel();
+        var title = Theme.Text(pending.Count == 1
+            ? "A dictation wasn't transcribed"
+            : $"{pending.Count} dictations weren't transcribed", 14, weight: FontWeights.SemiBold);
+        body.Children.Add(title);
+        var explain = Theme.Text("The recording was saved. Retry puts the text on your clipboard.", 12, Theme.TextSecondary);
+        explain.Margin = new Thickness(0, 2, 0, 8);
+        body.Children.Add(explain);
+
+        foreach (string path in pending)
+        {
+            var row = new Grid { Margin = new Thickness(0, 4, 0, 0) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var when = Theme.Text($"Recorded {Theme.TimeAgo(PendingAudio.RecordedAt(path)).ToLowerInvariant()}", 14);
+            when.VerticalAlignment = VerticalAlignment.Center;
+            var retry = new Button
+            {
+                Content = "Retry",
+                Appearance = ControlAppearance.Primary,
+                Icon = new SymbolIcon { Symbol = SymbolRegular.ArrowClockwise24 },
+                Margin = new Thickness(8, 0, 8, 0),
+                IsEnabled = _c.State == DictationState.Idle,
+            };
+            retry.Click += async (_, _) => await _c.RetryPendingAsync(path);
+            var discard = new Button { Content = "Discard", Icon = new SymbolIcon { Symbol = SymbolRegular.Delete24 } };
+            discard.Click += (_, _) => _c.DiscardPending(path);
+
+            Grid.SetColumn(retry, 1);
+            Grid.SetColumn(discard, 2);
+            row.Children.Add(when);
+            row.Children.Add(retry);
+            row.Children.Add(discard);
+            body.Children.Add(row);
+        }
+
+        PendingPanel.Children.Add(new Border
+        {
+            Child = body,
+            Style = (Style)FindResource("Card"),
+            BorderThickness = new Thickness(1),
+        }.Res(Border.BackgroundProperty, Theme.CautionBackground));
     }
 
     void RefreshStatus()
     {
         bool recording = _c.State == DictationState.Recording;
-        string colorKey = _c.State == DictationState.Idle && _c.ModelState == ModelState.Ready
+        bool ready = _c.ModelState is ModelState.Ready or ModelState.Sleeping;
+        bool hold = _c.Settings.Activation == ActivationMode.Hold;
+        string colorKey = _c.State == DictationState.Idle && ready
             ? Theme.Accent
             : Theme.StatusKey(_c);
         StatusCircle.SetResourceReference(Shape.FillProperty, colorKey);
@@ -64,11 +123,15 @@ public partial class HomePage : Page
 
         (StatusTitle.Text, string before, string after) = _c.State switch
         {
-            DictationState.Recording => ("Listening…", "Press", "again to stop and paste."),
+            DictationState.Recording => hold
+                ? ("Listening…", "Release", "to stop and paste. Esc cancels.")
+                : ("Listening…", "Press", "again to stop and paste. Esc cancels."),
             DictationState.Transcribing => ("Transcribing…", "Your text will appear where your cursor is.", ""),
             _ => _c.ModelState switch
             {
-                ModelState.Ready => ("Ready to dictate", "Press", "in any app. Press it again to stop and paste."),
+                ModelState.Ready or ModelState.Sleeping => hold
+                    ? ("Ready to dictate", "Hold", "in any app and speak. Let go to paste.")
+                    : ("Ready to dictate", "Press", "in any app. Press it again to stop and paste."),
                 ModelState.Downloading => ($"Downloading speech model… {_c.DownloadedMb} MB",
                     "One-time download. You can already start: press", "and your text is typed once it finishes."),
                 ModelState.Failed => ("The speech model didn't load", _c.ModelError ?? "Check the Speech page.", ""),
@@ -81,7 +144,7 @@ public partial class HomePage : Page
         if (_c.State != DictationState.Transcribing && _c.ModelState != ModelState.Failed)
             HintPanel.Children.Add(Theme.Keycaps(_c.Settings.Hotkey));
         if (after.Length > 0) HintPanel.Children.Add(HintText(after));
-        if (!_c.HotkeyRegistered && _c.State == DictationState.Idle && _c.ModelState == ModelState.Ready)
+        if (!_c.HotkeyRegistered && _c.State == DictationState.Idle && ready)
             HintPanel.Children.Add(Theme.Pill("Shortcut unavailable. Change it under General.", Theme.CriticalBackground, Theme.Critical));
 
         var model = AppSettings.Models.FirstOrDefault(m => m.Type == _c.Settings.ModelType && m.Quantization == _c.Settings.ModelQuantization);
@@ -93,6 +156,10 @@ public partial class HomePage : Page
             Chips.Children.Add(gpu
                 ? Theme.Pill($"GPU · {_c.RuntimeName}", Theme.SuccessBackground, Theme.TextPrimary)
                 : Theme.Pill("CPU", Theme.SubtleFill, Theme.TextPrimary));
+        }
+        else if (_c.ModelState == ModelState.Sleeping)
+        {
+            Chips.Children.Add(Theme.Pill("Model asleep to save memory · wakes when you dictate", Theme.SubtleFill, Theme.TextSecondary));
         }
         Chips.Children.Add(Theme.Pill(_c.Settings.Cleanup.Enabled ? "Cleanup on" : "Cleanup off", Theme.SubtleFill, Theme.TextPrimary));
 

@@ -79,6 +79,23 @@ public sealed class Transcriber : IDisposable
         }
     }
 
+    /// <summary>Frees the model's memory. The next <see cref="Load"/> brings it back.</summary>
+    public void Unload()
+    {
+        _gate.Wait();
+        try
+        {
+            _factory?.Dispose();
+            _factory = null;
+            _loadedPath = null;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+        Log.Write("Unloaded the speech model to free memory");
+    }
+
     public async Task<string> TranscribeAsync(float[] samples, AppSettings s, CancellationToken ct)
     {
         await _gate.WaitAsync(ct);

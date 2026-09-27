@@ -49,6 +49,8 @@
             </Grid>
         </Border>
 
+        <StackPanel x:Name="PendingPanel" Margin="0,4,0,0" Visibility="Collapsed" />
+
         <UniformGrid Margin="0,8,-8,0" Columns="3">
             <Border Margin="0,0,8,0" Padding="20,16" Style="{StaticResource Card}">
                 <StackPanel>

@@ -134,7 +134,7 @@ public sealed class TrayIcon : IDisposable
         {
             DictationState.Recording => TrayIcons.Recording,
             DictationState.Transcribing => TrayIcons.Busy,
-            _ => c.ModelState == ModelState.Ready ? TrayIcons.Idle : TrayIcons.Loading,
+            _ => c.ModelState is ModelState.Ready or ModelState.Sleeping ? TrayIcons.Idle : TrayIcons.Loading,
         };
         string text = $"BetterSTT — {c.StatusText} ({c.Settings.Hotkey})";
         _icon.Text = text.Length <= 127 ? text : text[..127];

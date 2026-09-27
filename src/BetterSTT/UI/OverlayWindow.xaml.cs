@@ -91,14 +91,30 @@ public partial class OverlayWindow : Window
     void OnFinished(DictationOutcome outcome)
     {
         if (!_c.Settings.ShowOverlay) return;
+        var showFor = TimeSpan.FromMilliseconds(1600);
         switch (outcome.Kind)
         {
             case OutcomeKind.Pasted:
                 int n = outcome.Item?.WordsRemoved ?? 0;
                 ShowResult("Pasted", n switch { 0 => "nothing to clean", 1 => "1 filler word removed", _ => $"{n} filler words removed" }, true);
                 break;
+            case OutcomeKind.PastedLast:
+                ShowResult("Pasted last dictation", "", true);
+                break;
             case OutcomeKind.Copied:
                 ShowResult("Copied to clipboard", "paste it with Ctrl+V", true);
+                break;
+            case OutcomeKind.Blocked:
+                // The user has to act, so this one stays up longer.
+                ShowResult("Copied to clipboard", "this window blocks typing, press Ctrl+V", false);
+                showFor = TimeSpan.FromSeconds(4);
+                break;
+            case OutcomeKind.Recovered:
+                ShowResult("Recovered", "copied to clipboard", true);
+                break;
+            case OutcomeKind.Cancelled:
+                ShowResult("Cancelled", "", false);
+                showFor = TimeSpan.FromMilliseconds(900);
                 break;
             case OutcomeKind.NoSpeech:
                 ShowResult("No speech detected", "", false);
@@ -107,10 +123,12 @@ public partial class OverlayWindow : Window
                 ShowResult("Nothing to type", "", false);
                 break;
             default:
-                ShowResult("Dictation failed", "see the tray notification", false);
+                ShowResult("Dictation failed", "recording saved, retry from Home", false);
+                showFor = TimeSpan.FromSeconds(4);
                 break;
         }
         _hideTimer.Stop();
+        _hideTimer.Interval = showFor;
         _hideTimer.Start();
     }
 
@@ -126,6 +144,7 @@ public partial class OverlayWindow : Window
         DetailText.Visibility = Visibility.Visible;
         Keys.Children.Clear();
         foreach (var part in _c.Settings.Hotkey.Parts()) Keys.Children.Add(Keycap(part));
+        StopText.Text = _c.Settings.Activation == ActivationMode.Hold ? "release to stop" : "to stop";
         StopHint.Visibility = Visibility.Visible;
         _clock.Start();
         ShowAtBottom();
@@ -179,7 +198,7 @@ public partial class OverlayWindow : Window
         Pill.BorderBrush = new SolidColorBrush(p.Border);
         Shadow.Opacity = p.ShadowOpacity;
         TitleText.Foreground = new SolidColorBrush(p.Text);
-        DetailText.Foreground = StopText.Foreground = new SolidColorBrush(p.Subtle);
+        DetailText.Foreground = StopText.Foreground = EscText.Foreground = new SolidColorBrush(p.Subtle);
         Separator.Fill = new SolidColorBrush(p.Border);
         RecDot.Fill = RecHalo.Fill = new SolidColorBrush(p.Recording);
         foreach (var bar in _bars) bar.Fill = new SolidColorBrush(p.Recording);
