@@ -208,7 +208,7 @@ public static class TextInjector
     /// Null when nothing was selected or it's too long to be a word or name. In test runs (--no-paste) no
     /// keys are sent; the clipboard's current text is used instead.
     /// </summary>
-    public static async Task<string?> CopySelectionAsync()
+    public static async Task<string?> CopySelectionAsync(int maxLength = 80, bool singleLine = true)
     {
         string? text = null;
         if (ClipboardOnly)
@@ -235,7 +235,7 @@ public static class TextInjector
             }
         }
         text = text?.Trim();
-        return string.IsNullOrEmpty(text) || text.Length > 80 || text.Contains('\n') ? null : text;
+        return string.IsNullOrEmpty(text) || text.Length > maxLength || (singleLine && text.Contains('\n')) ? null : text;
     }
 
     [DllImport("user32.dll")]

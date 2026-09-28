@@ -88,6 +88,10 @@ public sealed class WritingStyle
     /// <summary>Saying "comma", "period", "question mark"… types the mark.</summary>
     public bool SpokenPunctuation { get; set; }
 
+    /// <summary>After the rules, local AI edits the text following <see cref="AiInstructions"/> (needs AI turned on).</summary>
+    public bool AiPolish { get; set; }
+    public string AiInstructions { get; set; } = "";
+
     /// <summary>Turns spoken code ("camel case user name", "dot", "underscore") into identifiers and symbols.</summary>
     public bool SpokenCode { get; set; }
 
@@ -334,6 +338,16 @@ public sealed class AppSettings
     /// <summary>Select a word in any app and press this to add it to the dictionary.</summary>
     public bool AddWordEnabled { get; set; } = true;
     public HotkeyBinding AddWordHotkey { get; set; } = new() { Key = Keys.D, Ctrl = true, Alt = true };
+    /// <summary>Local AI through Ollama. Off until the user turns it on; nothing else AI-related runs while off.</summary>
+    public bool AiEnabled { get; set; }
+    /// <summary>The Ollama model to use, e.g. "gemma3:4b".</summary>
+    public string AiModel { get; set; } = "";
+    /// <summary>How long to wait for an AI edit before typing the rule-cleaned text instead.</summary>
+    public int AiTimeoutSeconds { get; set; } = 10;
+    /// <summary>Select text anywhere, press this, and say how to change it.</summary>
+    public bool RewriteEnabled { get; set; } = true;
+    public HotkeyBinding RewriteHotkey { get; set; } = new() { Key = Keys.R, Ctrl = true, Alt = true };
+
     /// <summary>While on, dictations aren't kept in the recent list (only the totals count them).</summary>
     public bool PrivateMode { get; set; }
     /// <summary>Line breaks become spaces (set per app on the Apps page).</summary>

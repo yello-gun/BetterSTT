@@ -147,6 +147,10 @@ public static class TextCleaner
         return Regex.Replace(text, @" {2,}", " ").Trim();
     }
 
+    /// <summary>True when the whole dictation is a snippet's trigger (so it's typed exactly, never edited by AI).</summary>
+    public static bool IsSnippet(string raw, AppSettings s) =>
+        s.Snippets.Count > 0 && (MatchSnippet(Clean(raw, s.Cleanup), s.Snippets) ?? MatchSnippet(raw, s.Snippets)) != null;
+
     /// <summary>The same pipeline with everything taken from the settings.</summary>
     public static string Process(string raw, AppSettings s) =>
         Process(raw, s.Cleanup, s.Replacements, s.CurrentStyle, s.Snippets);

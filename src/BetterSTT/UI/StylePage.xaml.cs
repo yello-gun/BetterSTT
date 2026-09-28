@@ -135,6 +135,8 @@ public partial class StylePage : Page
                 SpokenMath = source.SpokenMath,
                 SpokenLayout = source.SpokenLayout,
                 SpokenCode = source.SpokenCode,
+                AiPolish = source.AiPolish,
+                AiInstructions = source.AiInstructions,
                 SpokenPunctuation = source.SpokenPunctuation,
             });
             s.Style = name;
@@ -246,6 +248,32 @@ public partial class StylePage : Page
         Editor.Children.Add(Option("Spoken code",
             "For code and terminals: “camel case user name” → userName (also pascal, snake, kebab and constant case), and “dot”, “underscore”, “slash”, “equals”, brackets and more become symbols. Nothing is added that you didn't say.",
             style.SpokenCode, on => EditStyle(s => s.SpokenCode = on), new StackPanel()));
+
+        // AI polish (only does anything while AI is on)
+        var aiDetails = new StackPanel();
+        var aiNote = Theme.Text(_c.Settings.AiEnabled
+            ? $"Your instructions for the AI. Leave empty for the default: “{LocalAi.DefaultInstructions}”"
+            : "AI is off. Turn it on on the AI page; until then this style uses the rules only.", 12, Theme.TextSecondary);
+        aiNote.Margin = new Thickness(0, 0, 0, 6);
+        var instructions = new TextBox
+        {
+            Text = style.AiInstructions,
+            PlaceholderText = "e.g. Make it friendly and short. Keep my wording where it works.",
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            MinLines = 2,
+        };
+        System.Windows.Automation.AutomationProperties.SetName(instructions, "AI instructions");
+        instructions.LostFocus += (_, _) =>
+        {
+            string text = instructions.Text.Trim();
+            if (text != Current.AiInstructions) EditStyle(s => s.AiInstructions = text);
+        };
+        aiDetails.Children.Add(aiNote);
+        aiDetails.Children.Add(instructions);
+        Editor.Children.Add(Option("AI polish",
+            "After the rules, local AI edits the text following your instructions, e.g. fixing sentences that don't make sense. Home keeps the version without AI, and if the AI is slow or unavailable the rule-cleaned text is typed instead.",
+            style.AiPolish, on => EditStyle(s => s.AiPolish = on), aiDetails));
 
         // Spoken math
         var mathDetails = new StackPanel { Orientation = Orientation.Horizontal };

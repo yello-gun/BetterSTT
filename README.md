@@ -67,6 +67,15 @@ A writing style decides how much BetterSTT changes what you said. You can switch
 
 Every style except Exact words also understands "new line" and "new paragraph" when you say them as their own phrase. A style can also turn spoken punctuation into marks, so "comma," "period" and "question mark" type the symbols.
 
+## Optional local AI
+
+BetterSTT can use an AI model running on your own PC through [Ollama](https://ollama.com). It's off by default and turned on from the AI page, where you also pick the model. Any model you have in Ollama can be used, and the AI page offers recommended ones to download, from Gemma 3 4B (fastest) to Gemma 3 27B (best quality, but slow on most GPUs).
+
+- AI polish is a switch on each writing style, with your own instructions for it, such as "make it clear and direct, keep my wording where it works." The rules still clean every dictation first, and the AI edits the result. This is what fixes sentences that don't make sense, which the rules can't do.
+- Rewrite with AI works on text you've already written. Select it in any app, press Ctrl + Alt + R, say how to change it ("make it more formal," "shorten it," "translate it to Spanish") and press the shortcut again. With nothing selected, say what to write.
+
+The AI never holds up a dictation. If Ollama isn't running, the AI is slower than the time limit you set, or its reply looks like it answered your text instead of editing it or added things you didn't say, BetterSTT types the rule-cleaned text instead. Home keeps the version without AI for every AI edit, with a button to copy it. BetterSTT only talks to Ollama at 127.0.0.1 on your own PC, so the AI features work offline and your text never leaves the computer.
+
 ## Making it fit how you work
 
 Word fixes correct words BetterSTT keeps getting wrong. The fastest way to add one is to select the word in any app and press Ctrl + Alt + D, which opens a small window where you can have BetterSTT learn the spelling or always replace it with the right one. If it writes "git hub," click that word in a recent dictation on the Home page and type "GitHub." The fix applies from then on, and the word is also given to the speech model as a hint so it hears it right more often.
@@ -99,7 +108,7 @@ Per-app rules change settings for one app only. Examples are Exact words in a co
 
 ## Privacy
 
-Speech recognition runs on your own PC with [Whisper](https://github.com/openai/whisper) through [Whisper.net](https://github.com/sandrohanea/whisper.net). Your audio and text never leave your computer. BetterSTT connects to the internet for two things only, which are the one-time speech model download from Hugging Face and the daily update check on GitHub. Neither request contains anything about you or what you said, and the update check can be turned off. The [privacy policy](PRIVACY.md) has the details.
+Speech recognition runs on your own PC with [Whisper](https://github.com/openai/whisper) through [Whisper.net](https://github.com/sandrohanea/whisper.net). Your audio and text never leave your computer. BetterSTT connects to the internet for two things only, which are the one-time speech model download from Hugging Face and the daily update check on GitHub. Neither request contains anything about you or what you said, and the update check can be turned off. The optional AI features use Ollama on your own PC and don't go online. The [privacy policy](PRIVACY.md) has the details.
 
 Your settings, your recent dictations, a log and your speech models are stored in `%LOCALAPPDATA%\BetterSTT`. Private mode, on the Home page or in the tray menu, stops new dictations from being kept in the recent list, and Home has a search box once the list gets longer. Home keeps the last three dictations by default, and you can change that to 5, 10, 15 or all of them. The log records timings and outcomes and never records what you said.
 
@@ -129,6 +138,7 @@ src/BetterSTT/           the app (.NET 8, WPF with the WPF-UI Fluent design, liv
   DictationController.cs recording, transcription, cleanup, pasting and settings changes
   TextCleaner.cs         the cleanup rules, writing styles and snippets
   SpokenMath.cs          spoken math as symbols or LaTeX
+  LocalAi.cs             the optional AI features: Ollama, prompts and checks on every reply
   Transcriber.cs         downloading, loading and running the Whisper model
   AudioRecorder.cs       microphone capture, silence trimming and the level meter
   Native.cs              the global shortcut, typing into other apps and the startup entry

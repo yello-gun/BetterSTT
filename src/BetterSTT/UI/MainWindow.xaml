@@ -68,6 +68,7 @@
                 <ui:NavigationViewItem Content="Style" Icon="{ui:SymbolIcon TextEditStyle24}" TargetPageType="{x:Type local:StylePage}" />
                 <ui:NavigationViewItem Content="Dictionary" Icon="{ui:SymbolIcon BookLetter24}" TargetPageType="{x:Type local:DictionaryPage}" />
                 <ui:NavigationViewItem Content="Apps" Icon="{ui:SymbolIcon WindowApps24}" TargetPageType="{x:Type local:AppsPage}" />
+                <ui:NavigationViewItem Content="AI" Icon="{ui:SymbolIcon Sparkle24}" TargetPageType="{x:Type local:AiPage}" />
                 <ui:NavigationViewItem Content="Speech" Icon="{ui:SymbolIcon Mic24}" TargetPageType="{x:Type local:SpeechPage}" />
                 <ui:NavigationViewItem Content="General" Icon="{ui:SymbolIcon Settings24}" TargetPageType="{x:Type local:GeneralPage}" />
             </ui:NavigationView.MenuItems>

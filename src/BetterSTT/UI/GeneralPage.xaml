@@ -85,6 +85,24 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Body}" Text="Rewrite with AI" />
+                    <TextBlock x:Name="RewriteHint" Margin="0,2,0,0" Style="{StaticResource Caption}" />
+                </StackPanel>
+                <ContentControl x:Name="RewriteKeys" Grid.Column="1" Margin="16,0" VerticalAlignment="Center" />
+                <ui:Button x:Name="RewriteChangeButton" Grid.Column="2" MinWidth="90" Margin="0,0,16,0" Click="OnChangeRewrite" Content="Change" />
+                <ui:ToggleSwitch x:Name="RewriteSwitch" Grid.Column="3" VerticalAlignment="Center" AutomationProperties.Name="Rewrite with AI shortcut" />
+            </Grid>
+        </Border>
+
+        <Border Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Style="{StaticResource Body}" Text="Keep listening after you stop" />

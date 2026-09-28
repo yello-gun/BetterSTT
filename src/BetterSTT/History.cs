@@ -14,6 +14,10 @@ public sealed class RecentDictation
     public string? AppName { get; set; }
     /// <summary>The language the model detected, when it was set to detect automatically.</summary>
     public string? Language { get; set; }
+    /// <summary>When AI edited the text: the version the rules produced, before the AI.</summary>
+    public string? WithoutAi { get; set; }
+    /// <summary>For a rewrite of selected text: what was asked for, e.g. "make it more formal". Raw holds the original text.</summary>
+    public string? Instruction { get; set; }
 }
 
 /// <summary>Lifetime stats plus the last few dictations, stored locally in history.json.</summary>
@@ -66,17 +70,20 @@ public sealed class HistoryStore
     }
 
     /// <param name="limit">How many recent dictations to keep; 0 keeps them all.</param>
-    public RecentDictation Add(string raw, string clean, AppInfo? app, int limit, string? language = null)
+    public RecentDictation Add(string raw, string clean, AppInfo? app, int limit, string? language = null,
+        string? withoutAi = null, string? instruction = null)
     {
         var item = new RecentDictation
         {
             Language = language,
+            WithoutAi = withoutAi,
+            Instruction = instruction,
             Time = DateTime.Now,
             Raw = raw,
             Clean = clean,
             AppProcess = app?.ProcessName,
             AppName = app?.DisplayName,
-            WordsRemoved = Math.Max(0, TextCleaner.CountWords(raw) - TextCleaner.CountWords(clean)),
+            WordsRemoved = instruction != null ? 0 : Math.Max(0, TextCleaner.CountWords(raw) - TextCleaner.CountWords(clean)),
         };
         Recent.Insert(0, item);
         TrimTo(limit);
@@ -100,17 +107,20 @@ public sealed class HistoryStore
     }
 
     /// <summary>Private mode: counts a dictation in the totals without keeping its text.</summary>
-    public RecentDictation CountOnly(string raw, string clean, AppInfo? app = null, string? language = null)
+    public RecentDictation CountOnly(string raw, string clean, AppInfo? app = null, string? language = null,
+        string? withoutAi = null, string? instruction = null)
     {
         var item = new RecentDictation
         {
             Language = language,
+            WithoutAi = withoutAi,
+            Instruction = instruction,
             Time = DateTime.Now,
             Raw = raw,
             Clean = clean,
             AppProcess = app?.ProcessName,
             AppName = app?.DisplayName,
-            WordsRemoved = Math.Max(0, TextCleaner.CountWords(raw) - TextCleaner.CountWords(clean)),
+            WordsRemoved = instruction != null ? 0 : Math.Max(0, TextCleaner.CountWords(raw) - TextCleaner.CountWords(clean)),
         };
         Dictations++;
         WordsRemoved += item.WordsRemoved;

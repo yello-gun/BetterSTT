@@ -26,9 +26,10 @@ public enum OutcomeKind
     Failed,
 }
 
-public sealed record DictationOutcome(OutcomeKind Kind, RecentDictation? Item = null, string? Error = null);
+/// <param name="Note">A short remark for the indicator, e.g. why the AI edit wasn't used.</param>
+public sealed record DictationOutcome(OutcomeKind Kind, RecentDictation? Item = null, string? Error = null, string? Note = null);
 
-public enum HotkeyTarget { Dictate, PasteLast, AddWord }
+public enum HotkeyTarget { Dictate, PasteLast, AddWord, Rewrite }
 
 /// <summary>
 /// Owns the dictation pipeline (hotkey → record → transcribe → clean → paste) and the settings.
@@ -36,7 +37,7 @@ public enum HotkeyTarget { Dictate, PasteLast, AddWord }
 /// </summary>
 public sealed class DictationController : IDisposable
 {
-    const int DictateHotkeyId = 1, PasteLastHotkeyId = 2, CancelHotkeyId = 3, AddWordHotkeyId = 4;
+    const int DictateHotkeyId = 1, PasteLastHotkeyId = 2, CancelHotkeyId = 3, AddWordHotkeyId = 4, RewriteHotkeyId = 5;
     static readonly HotkeyBinding EscapeKey = new() { Key = WinFormsKeys.Escape, Ctrl = false, Alt = false };
 
     readonly Dispatcher _ui = Dispatcher.CurrentDispatcher;
@@ -124,6 +125,15 @@ public sealed class DictationController : IDisposable
     public bool HotkeyRegistered { get; private set; }
     public bool PasteLastRegistered { get; private set; }
     public bool AddWordRegistered { get; private set; }
+    public bool RewriteRegistered { get; private set; }
+
+    /// <summary>The current recording is an instruction for rewriting selected text, not a dictation.</summary>
+    public bool RewriteMode { get; private set; }
+    /// <summary>What was selected when the rewrite started; null when nothing was (the AI then writes from scratch).</summary>
+    public string? RewriteSource { get; private set; }
+
+    /// <summary>What the indicator says while working: transcribing, or polishing/rewriting with AI.</summary>
+    public string BusyText { get; private set; } = "Transcribing…";
 
     /// <summary>The add-a-word shortcut was pressed; carries the text that was selected (null if nothing was).</summary>
     public event Action<string?>? AddWordRequested;
@@ -207,6 +217,11 @@ public sealed class DictationController : IDisposable
             case AddWordHotkeyId:
                 _ = RequestAddWordAsync();
                 break;
+            case RewriteHotkeyId:
+                if (State == DictationState.Recording && RewriteMode) _ = StopAndTranscribeAsync();
+                else if (State == DictationState.Idle) _ = BeginRewriteAsync();
+                else Sounds.Error();
+                break;
             case PasteLastHotkeyId:
                 _ = PasteLastAsync();
                 break;
@@ -220,7 +235,7 @@ public sealed class DictationController : IDisposable
     {
         if (_hotkeySuspensions > 0)
         {
-            HotkeyRegistered = PasteLastRegistered = AddWordRegistered = false;
+            HotkeyRegistered = PasteLastRegistered = AddWordRegistered = RewriteRegistered = false;
             return;
         }
 
@@ -237,6 +252,13 @@ public sealed class DictationController : IDisposable
         AddWordRegistered = Settings.AddWordEnabled && _hotkey.Register(AddWordHotkeyId, Settings.AddWordHotkey);
         if (Settings.AddWordEnabled && !AddWordRegistered && announceConflict)
             Notice?.Invoke($"{Settings.AddWordHotkey} (add a word to the dictionary) is already used by another app.", true);
+
+        // The rewrite shortcut exists only while AI is turned on.
+        _hotkey.Unregister(RewriteHotkeyId);
+        bool rewriteWanted = Settings.AiEnabled && Settings.RewriteEnabled;
+        RewriteRegistered = rewriteWanted && _hotkey.Register(RewriteHotkeyId, Settings.RewriteHotkey);
+        if (rewriteWanted && !RewriteRegistered && announceConflict)
+            Notice?.Invoke($"{Settings.RewriteHotkey} (rewrite with AI) is already used by another app.", true);
     }
 
     /// <summary>Temporarily frees the hotkeys, only while a new shortcut is being recorded.</summary>
@@ -246,7 +268,8 @@ public sealed class DictationController : IDisposable
         _hotkey.Unregister(DictateHotkeyId);
         _hotkey.Unregister(PasteLastHotkeyId);
         _hotkey.Unregister(AddWordHotkeyId);
-        HotkeyRegistered = PasteLastRegistered = AddWordRegistered = false;
+        _hotkey.Unregister(RewriteHotkeyId);
+        HotkeyRegistered = PasteLastRegistered = AddWordRegistered = RewriteRegistered = false;
     }
 
     public void ResumeHotkey()
@@ -264,6 +287,7 @@ public sealed class DictationController : IDisposable
             (HotkeyTarget.Dictate, Settings.Hotkey, true, "dictation"),
             (HotkeyTarget.PasteLast, Settings.PasteLastHotkey, Settings.PasteLastEnabled, "paste-last"),
             (HotkeyTarget.AddWord, Settings.AddWordHotkey, Settings.AddWordEnabled, "add-a-word"),
+            (HotkeyTarget.Rewrite, Settings.RewriteHotkey, Settings.AiEnabled && Settings.RewriteEnabled, "rewrite"),
         ];
         foreach (var o in others)
             if (o.Target != target && o.InUse && binding.SameAs(o.Binding))
@@ -281,7 +305,8 @@ public sealed class DictationController : IDisposable
             {
                 case HotkeyTarget.Dictate: s.Hotkey = binding; break;
                 case HotkeyTarget.PasteLast: s.PasteLastHotkey = binding; break;
-                default: s.AddWordHotkey = binding; break;
+                case HotkeyTarget.AddWord: s.AddWordHotkey = binding; break;
+                default: s.RewriteHotkey = binding; break;
             }
         });
         return null;
@@ -305,7 +330,10 @@ public sealed class DictationController : IDisposable
             || !before.PasteLastHotkey.SameAs(Settings.PasteLastHotkey)
             || before.PasteLastEnabled != Settings.PasteLastEnabled
             || !before.AddWordHotkey.SameAs(Settings.AddWordHotkey)
-            || before.AddWordEnabled != Settings.AddWordEnabled)
+            || before.AddWordEnabled != Settings.AddWordEnabled
+            || !before.RewriteHotkey.SameAs(Settings.RewriteHotkey)
+            || before.RewriteEnabled != Settings.RewriteEnabled
+            || before.AiEnabled != Settings.AiEnabled)
         {
             RegisterHotkeys(announceConflict: true);
         }
@@ -438,7 +466,7 @@ public sealed class DictationController : IDisposable
         }
 
         _recordingStarted = DateTime.Now;
-        _handsFree = Settings.Activation == ActivationMode.HandsFree;
+        _handsFree = Settings.Activation == ActivationMode.HandsFree && !RewriteMode;
         _session++;
         _chunks.Clear();
         _chunkFailed = false;
@@ -447,6 +475,10 @@ public sealed class DictationController : IDisposable
         State = DictationState.Recording;
         Sounds.Start();
         WakeModel(); // a sleeping model reloads while you talk
+        // The AI model loads while you talk too, if this dictation will use it.
+        var style = ActiveSettings.CurrentStyle;
+        if (ActiveSettings.AiEnabled && !string.IsNullOrWhiteSpace(ActiveSettings.AiModel) && (RewriteMode || style.AiPolish && !style.ExactWords))
+            _ = LocalAi.WarmUpAsync(ActiveSettings.AiModel);
         _hotkey.Register(CancelHotkeyId, EscapeKey); // Esc cancels, only while listening
         // Hands-free sessions can run long; they're transcribed as they go, so only a generous safety limit applies.
         _maxLengthTimer.Interval = TimeSpan.FromMinutes(_handsFree ? 120 : Math.Max(1, Settings.MaxRecordingMinutes));
@@ -484,6 +516,8 @@ public sealed class DictationController : IDisposable
     /// <summary>Reports the outcome to the UI and notes its kind (never the text) in the log.</summary>
     void Finish(DictationOutcome outcome)
     {
+        RewriteMode = false;
+        RewriteSource = null;
         Log.Write($"Outcome: {outcome.Kind}");
         DictationFinished?.Invoke(outcome);
     }
@@ -556,14 +590,125 @@ public sealed class DictationController : IDisposable
             raw = await TranscribeRawAsync(samples, settings);
         }
         if (raw == null) return new DictationOutcome(OutcomeKind.NoSpeech);
+        if (RewriteMode) return await RewriteAsync(raw, settings);
         string clean = TextCleaner.Process(raw, settings);
         if (clean.Length == 0) return new DictationOutcome(OutcomeKind.Empty);
 
-        var item = Remember(raw, clean, _target, settings);
-        Log.Write($"Dictation: {LastAudioSeconds:F1} s audio, {LastTranscribeSeconds:F2} s to transcribe, {item.WordsRemoved} words removed");
+        var (final, withoutAi, note) = TextCleaner.IsSnippet(raw, settings) ? (clean, null, null) : await PolishAsync(clean, settings);
+        var item = Remember(raw, final, _target, settings, withoutAi);
+        Log.Write($"Dictation: {LastAudioSeconds:F1} s audio, {LastTranscribeSeconds:F2} s to transcribe, {item.WordsRemoved} words removed{(withoutAi != null ? ", AI polished" : "")}");
 
-        var kind = await DeliverAsync(settings.AddTrailingSpace ? clean + " " : clean, clean, settings);
-        return new DictationOutcome(kind, item);
+        var kind = await DeliverAsync(settings.AddTrailingSpace ? final + " " : final, final, settings);
+        return new DictationOutcome(kind, item, Note: note);
+    }
+
+    // ---- local AI ----
+
+    /// <summary>
+    /// Runs the style's AI polish on rule-cleaned text, if AI is on and the style asks for it. Never blocks a
+    /// dictation: when the AI is off, not running, too slow or returns something odd, the rule-cleaned text is
+    /// used and <c>Note</c> says why.
+    /// </summary>
+    async Task<(string Text, string? WithoutAi, string? Note)> PolishAsync(string clean, AppSettings settings)
+    {
+        var style = settings.CurrentStyle;
+        if (!settings.AiEnabled || !style.AiPolish || style.ExactWords || string.IsNullOrWhiteSpace(settings.AiModel))
+            return (clean, null, null);
+
+        SetBusy("Polishing with AI…");
+        var timer = Stopwatch.StartNew();
+        try
+        {
+            if (!await LocalAi.IsRunningAsync())
+            {
+                _ = LocalAi.StartAsync(); // ready for next time
+                return (clean, null, "AI wasn't running, so the rules cleaned it");
+            }
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Clamp(settings.AiTimeoutSeconds, 2, 120)));
+            string reply = LocalAi.Tidy(await LocalAi.ChatAsync(settings.AiModel,
+                LocalAi.PolishSystemPrompt(style.AiInstructions), LocalAi.Wrap(clean), cts.Token));
+            Log.Write($"AI polish: {timer.Elapsed.TotalSeconds:F1} s with {settings.AiModel}");
+            if (LocalAi.CheckPolish(clean, reply) is { } problem)
+            {
+                Log.Write($"AI edit not used: {problem}");
+                return (clean, null, $"AI edit not used: {problem}");
+            }
+            return reply == clean ? (clean, null, null) : (reply, clean, null);
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Write($"AI polish took longer than {settings.AiTimeoutSeconds} s; used the rule-cleaned text");
+            return (clean, null, "AI took too long, so the rules cleaned it");
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"AI polish failed: {ex.Message}");
+            return (clean, null, "AI unavailable, so the rules cleaned it");
+        }
+        finally
+        {
+            SetBusy("Transcribing…");
+        }
+    }
+
+    void SetBusy(string text)
+    {
+        BusyText = text;
+        StateChanged?.Invoke();
+    }
+
+    /// <summary>Starts a rewrite: copies the selection, then listens for how to change it.</summary>
+    async Task BeginRewriteAsync()
+    {
+        if (!Settings.AiEnabled || string.IsNullOrWhiteSpace(Settings.AiModel))
+        {
+            Sounds.Error();
+            Notice?.Invoke("Choose an AI model on the AI page first.", true);
+            return;
+        }
+        RewriteSource = TextInjector.IsOwnWindowFocused() ? null : await TextInjector.CopySelectionAsync(maxLength: 8000, singleLine: false);
+        RewriteMode = true;
+        if (!StartRecording()) RewriteMode = false;
+        _ = LocalAi.StartAsync(); // warms Ollama up while you talk
+    }
+
+    /// <summary>Asks the AI to rewrite the selection (or write from scratch) as instructed, and types the result over it.</summary>
+    async Task<DictationOutcome> RewriteAsync(string raw, AppSettings settings)
+    {
+        string instruction = TextCleaner.Clean(raw, settings.Cleanup);
+        string? source = RewriteSource;
+        if (instruction.Length == 0) return new DictationOutcome(OutcomeKind.Empty);
+
+        SetBusy(source == null ? "Writing with AI…" : "Rewriting with AI…");
+        var timer = Stopwatch.StartNew();
+        string result;
+        try
+        {
+            if (!await LocalAi.StartAsync()) throw new InvalidOperationException("Ollama isn't running and couldn't be started.");
+            // Rewrites can be long, so they get more time than a polish.
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Clamp(settings.AiTimeoutSeconds * 3, 10, 300)));
+            result = LocalAi.Tidy(await LocalAi.ChatAsync(settings.AiModel,
+                LocalAi.RewriteSystemPrompt(instruction, source != null), source != null ? LocalAi.Wrap(source) : instruction, cts.Token));
+            Log.Write($"AI rewrite: {timer.Elapsed.TotalSeconds:F1} s with {settings.AiModel}");
+        }
+        catch (Exception ex)
+        {
+            string why = ex is OperationCanceledException ? "The AI took too long." : ex.Message;
+            Log.Write($"AI rewrite failed: {why}");
+            Sounds.Error();
+            Notice?.Invoke($"The rewrite didn't work: {why} Nothing was changed.", true);
+            return new DictationOutcome(OutcomeKind.Failed, Error: why);
+        }
+        finally
+        {
+            SetBusy("Transcribing…");
+        }
+        if (result.Length == 0) return new DictationOutcome(OutcomeKind.Empty);
+
+        var item = Remember(source ?? "", result, _target, settings, instruction: instruction);
+        // The selection is still highlighted in the app, so pasting replaces it.
+        var kind = await DeliverAsync(result, result, settings);
+        return new DictationOutcome(kind, item, Note: source == null ? "written with AI" : "rewritten with AI");
     }
 
     /// <returns>Null when there was no speech in the recording.</returns>
@@ -641,12 +786,12 @@ public sealed class DictationController : IDisposable
 
     /// <summary>Types or pastes the text, falling back to the clipboard where typing can't reach.</summary>
     /// <summary>Adds a dictation to history, or in private mode only to the totals (kept in memory for paste-last).</summary>
-    RecentDictation Remember(string raw, string clean, AppInfo? app, AppSettings settings)
+    RecentDictation Remember(string raw, string clean, AppInfo? app, AppSettings settings, string? withoutAi = null, string? instruction = null)
     {
-        string? language = settings.Language == "auto" ? _transcriber.LastLanguage : null;
-        if (Settings.PrivateMode) return _lastPrivate = History.CountOnly(raw, clean, app, language);
+        string? language = settings.Language == "auto" && instruction == null ? _transcriber.LastLanguage : null;
+        if (Settings.PrivateMode) return _lastPrivate = History.CountOnly(raw, clean, app, language, withoutAi, instruction);
         _lastPrivate = null;
-        return History.Add(raw, clean, app, Settings.RecentLimit, language);
+        return History.Add(raw, clean, app, Settings.RecentLimit, language, withoutAi, instruction);
     }
 
     async Task<OutcomeKind> DeliverAsync(string text, string clipboardText, AppSettings settings)

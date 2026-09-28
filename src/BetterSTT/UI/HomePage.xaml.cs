@@ -310,7 +310,8 @@ public partial class HomePage : Page
         var text = Theme.Text(item.Clean);
         string removed = item.WordsRemoved == 1 ? "1 word removed" : $"{item.WordsRemoved} words removed";
         string where = (item.AppName != null ? $" · in {item.AppName}" : "")
-                       + (AppSettings.LanguageName(item.Language) is { } language ? $" · {language}" : "");
+                       + (AppSettings.LanguageName(item.Language) is { } language ? $" · {language}" : "")
+                       + (item.Instruction != null ? " · rewritten with AI" : item.WithoutAi != null ? " · polished with AI" : "");
         var meta = Theme.Text($"{Theme.TimeAgo(item.Time)}{where} · {removed}", 12, Theme.TextSecondary);
         meta.Margin = new Thickness(0, 4, 0, 0);
         var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
@@ -359,11 +360,14 @@ public partial class HomePage : Page
         if (open)
         {
             var divider = new Border { Height = 1, Margin = new Thickness(0, 12, 0, 10) }.Res(Border.BackgroundProperty, Theme.Divider);
-            var label = Theme.Text("What you said", 12, Theme.TextSecondary);
+            // For an AI edit, the diff shows what the AI changed; for a rewrite, the original selection.
+            var label = Theme.Text(item.Instruction != null ? $"Rewritten from (you asked: “{item.Instruction}”)"
+                : item.WithoutAi != null ? "What the AI changed" : "What you said", 12, Theme.TextSecondary);
             var diff = Theme.Text("");
             diff.Margin = new Thickness(0, 4, 0, 0);
             diff.LineHeight = 22;
-            Theme.ShowDiff(diff, item.Raw, item.Clean);
+            if (item.Instruction != null) diff.Text = item.Raw.Length > 0 ? item.Raw : "(nothing was selected)";
+            else Theme.ShowDiff(diff, item.WithoutAi ?? item.Raw, item.Clean);
             body.Children.Add(divider);
             body.Children.Add(label);
             body.Children.Add(diff);
@@ -381,8 +385,26 @@ public partial class HomePage : Page
                 TextInjector.SetClipboard(item.Raw.Trim());
                 copyOriginal.Content = "Copied";
             };
-            body.Children.Add(copyOriginal);
-            body.Children.Add(FixAWord(item));
+            var copies = new WrapPanel();
+            copies.Children.Add(copyOriginal);
+            if (item.WithoutAi != null)
+            {
+                var copyWithoutAi = new Button
+                {
+                    Content = "Copy without AI",
+                    Icon = new SymbolIcon { Symbol = SymbolRegular.Copy24 },
+                    Margin = new Thickness(8, 10, 0, 0),
+                    ToolTip = "Copy the version the rules produced, before the AI edited it",
+                };
+                copyWithoutAi.Click += (_, _) =>
+                {
+                    TextInjector.SetClipboard(item.WithoutAi);
+                    copyWithoutAi.Content = "Copied";
+                };
+                copies.Children.Add(copyWithoutAi);
+            }
+            body.Children.Add(copies);
+            if (item.Instruction == null) body.Children.Add(FixAWord(item));
         }
 
         return new Border { Child = body, Style = (Style)FindResource("Card") };

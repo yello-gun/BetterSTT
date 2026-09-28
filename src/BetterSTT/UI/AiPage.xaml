@@ -1,0 +1,107 @@
+<Page
+    x:Class="BetterSTT.UI.AiPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    Title="AI">
+    <StackPanel Margin="24,8,40,32">
+        <TextBlock Style="{StaticResource PageTitle}" Text="AI" />
+
+        <Border Padding="24,18" Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Text="Use local AI" />
+                    <TextBlock Margin="0,2,16,0" Style="{StaticResource Caption}" Text="Off by default. When it's on, a writing style can have AI polish your dictations, and you can rewrite selected text by voice. The AI runs on your PC through Ollama, so nothing is sent online. The rules still clean every dictation first, and you can always get the version without AI." />
+                </StackPanel>
+                <ui:ToggleSwitch x:Name="AiSwitch" Grid.Column="1" VerticalAlignment="Center" AutomationProperties.Name="Use local AI" />
+            </Grid>
+        </Border>
+
+        <StackPanel x:Name="Details">
+            <TextBlock Style="{StaticResource SectionTitle}" Text="Ollama" />
+            <Border Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Ellipse x:Name="StatusDot" Width="10" Height="10" Margin="0,0,14,0" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock x:Name="StatusText" Style="{StaticResource Body}" />
+                        <TextBlock x:Name="StatusHint" Margin="0,2,16,0" Style="{StaticResource Caption}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <ui:Button x:Name="StartButton" Click="OnStartOllama" Content="Start Ollama" Visibility="Collapsed" />
+                        <ui:Button x:Name="GetButton" Appearance="Primary" Click="OnGetOllama" Content="Get Ollama" Icon="{ui:SymbolIcon Open24}" Visibility="Collapsed" />
+                        <ui:Button Margin="8,0,0,0" Appearance="Transparent" Click="OnRefresh" Icon="{ui:SymbolIcon ArrowClockwise24}" ToolTip="Check again" AutomationProperties.Name="Check Ollama again" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <TextBlock Style="{StaticResource SectionTitle}" Text="Model" />
+            <TextBlock Margin="0,-4,0,8" Style="{StaticResource Caption}" Text="Smaller models answer faster; larger ones write better. Speech recognition also uses about 2 GB of graphics memory, so pick a model that fits next to it." />
+            <StackPanel x:Name="Models" />
+
+            <TextBlock Style="{StaticResource SectionTitle}" Text="Timing" />
+            <Border Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource Body}" Text="Wait for the AI at most" />
+                        <TextBlock Margin="0,2,16,0" Style="{StaticResource Caption}" Text="If an AI polish takes longer, the rule-cleaned text is typed instead, so a dictation is never held up. Rewrites get three times as long." />
+                    </StackPanel>
+                    <ComboBox x:Name="TimeoutBox" Grid.Column="1" MinWidth="150" AutomationProperties.Name="Wait for the AI at most" />
+                </Grid>
+            </Border>
+
+            <TextBlock Style="{StaticResource SectionTitle}" Text="Where AI is used" />
+            <Border Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource Body}" Text="AI polish" />
+                        <TextBlock Margin="0,2,16,0" Style="{StaticResource Caption}" Text="Turn it on for a writing style on the Style page, and write your own instructions for it. Styles can be set per app, so AI can polish email but stay out of your terminal." />
+                    </StackPanel>
+                    <ui:Button Grid.Column="1" Click="OnOpenStyle" Content="Open Style" />
+                </Grid>
+            </Border>
+            <Border Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource Body}" Text="Rewrite with AI" />
+                        <TextBlock x:Name="RewriteHint" Margin="0,2,16,0" Style="{StaticResource Caption}" />
+                    </StackPanel>
+                    <ui:Button Grid.Column="1" Click="OnOpenGeneral" Content="Change shortcut" />
+                </Grid>
+            </Border>
+
+            <TextBlock Style="{StaticResource SectionTitle}" Text="Try it" />
+            <Border Padding="24,18" Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Caption}" Text="Uses the instructions of your current writing style (or the default ones if it has none)." />
+                    <ui:TextBox x:Name="TryBox" Margin="0,10,0,10" AcceptsReturn="True" AutomationProperties.Name="Text to polish" MinLines="3" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal">
+                        <ui:Button x:Name="TryButton" Appearance="Primary" Click="OnTry" Content="Polish with AI" Icon="{ui:SymbolIcon Sparkle24}" />
+                        <TextBlock x:Name="TryStatus" Margin="12,0,0,0" VerticalAlignment="Center" Style="{StaticResource Caption}" />
+                    </StackPanel>
+                    <TextBlock x:Name="TryResult" Margin="0,12,0,0" Style="{StaticResource Body}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </StackPanel>
+</Page>

@@ -68,6 +68,8 @@ public partial class GeneralPage : Page
         LivePreviewSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.LivePreview = false); };
         PasteLastSwitch.Checked += (_, _) => { if (!_building) _c.Update(s => s.PasteLastEnabled = true); };
         PasteLastSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.PasteLastEnabled = false); };
+        RewriteSwitch.Checked += (_, _) => { if (!_building) _c.Update(s => s.RewriteEnabled = true); };
+        RewriteSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.RewriteEnabled = false); };
         AddWordSwitch.Checked += (_, _) => { if (!_building) _c.Update(s => s.AddWordEnabled = true); };
         AddWordSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.AddWordEnabled = false); };
         foreach (var (_, label) in SizeOptions) SizeBox.Items.Add(label);
@@ -124,6 +126,7 @@ public partial class GeneralPage : Page
         TailBox.SelectedIndex = Array.IndexOf(TailOptions, TailOptions.MinBy(o => Math.Abs(o.Ms - tail)));
         PasteLastSwitch.IsChecked = _c.Settings.PasteLastEnabled;
         AddWordSwitch.IsChecked = _c.Settings.AddWordEnabled;
+        RewriteSwitch.IsChecked = _c.Settings.RewriteEnabled;
         SizeBox.SelectedIndex = Math.Max(0, Array.FindIndex(SizeOptions, o => o.Size == _c.Settings.OverlaySize));
         OpacityBox.SelectedIndex = Math.Max(0, Array.IndexOf(OpacityOptions, OpacityOptions.MinBy(o => Math.Abs(o - _c.Settings.OverlayOpacity))));
         PositionBox.SelectedIndex = Math.Max(0, Array.FindIndex(PositionOptions, o => o.Position == _c.Settings.OverlayPosition));
@@ -215,6 +218,21 @@ public partial class GeneralPage : Page
             ? "Another app is using this shortcut. Choose a different one."
             : "Select a word in any app and press this to add it to your dictionary.";
         AddWordHint.SetResourceReference(TextBlock.ForegroundProperty, addWordBroken ? Theme.Critical : Theme.TextSecondary);
+
+        // The rewrite shortcut only exists while AI is on.
+        bool aiOn = _c.Settings.AiEnabled, rewriteOn = aiOn && _c.Settings.RewriteEnabled;
+        RewriteKeys.Content = Theme.Keycaps(_c.Settings.RewriteHotkey, 13);
+        RewriteKeys.Opacity = RewriteChangeButton.Opacity = rewriteOn ? 1 : 0.4;
+        RewriteChangeButton.IsEnabled = rewriteOn;
+        RewriteChangeButton.Content = "Change";
+        RewriteSwitch.IsEnabled = aiOn;
+        bool rewriteBroken = rewriteOn && !_c.RewriteRegistered;
+        RewriteHint.Text = !aiOn
+            ? "Needs AI, which is off. Turn it on on the AI page."
+            : rewriteBroken
+                ? "Another app is using this shortcut. Choose a different one."
+                : "Select text in any app, press this and say how to change it. Press it again when you're done.";
+        RewriteHint.SetResourceReference(TextBlock.ForegroundProperty, rewriteBroken ? Theme.Critical : Theme.TextSecondary);
     }
 
     void OnToggleMode(object sender, RoutedEventArgs e) => _c.Update(s => s.Activation = ActivationMode.Toggle);
@@ -229,12 +247,15 @@ public partial class GeneralPage : Page
 
     void OnChangeAddWord(object sender, RoutedEventArgs e) => BeginCapture(HotkeyTarget.AddWord);
 
+    void OnChangeRewrite(object sender, RoutedEventArgs e) => BeginCapture(HotkeyTarget.Rewrite);
+
     (ContentControl Keys, TextBlock Hint, Wpf.Ui.Controls.Button Button) CaptureUi(HotkeyTarget target) =>
         target switch
         {
             HotkeyTarget.Dictate => (ShortcutKeys, ShortcutHint, ChangeButton),
             HotkeyTarget.PasteLast => (PasteLastKeys, PasteLastHint, PasteLastChangeButton),
-            _ => (AddWordKeys, AddWordHint, AddWordChangeButton),
+            HotkeyTarget.AddWord => (AddWordKeys, AddWordHint, AddWordChangeButton),
+            _ => (RewriteKeys, RewriteHint, RewriteChangeButton),
         };
 
     void BeginCapture(HotkeyTarget target)

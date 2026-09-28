@@ -16,6 +16,8 @@ BetterSTT does not collect, send or share any personal data.
 
 There are no analytics and no telemetry.
 
+**Optional local AI.** The AI features are off unless you turn them on. When they're on, BetterSTT sends the text of a dictation (or the text you selected for a rewrite) to Ollama at 127.0.0.1, which is on your own PC, and nowhere else. Downloading a model from the AI page asks Ollama to fetch it from the Ollama library; that download is covered by [Ollama's privacy policy](https://ollama.com/privacy). The versions of your dictation with and without AI are stored like any other recent dictation.
+
 **Diagnostics.** The **Save diagnostics** button writes a .zip file to a folder you choose. It isn't sent anywhere; you decide whether to share it. It contains the log, your app, Windows and GPU details, and your settings with your vocabulary, word fixes and snippets replaced by "(hidden)". Your Windows user name is removed from file paths. It never contains anything you dictated.
 
 **Exporting your dictionary.** Export on the Dictionary page writes your word fixes, snippets and vocabulary to a file you choose. It isn't sent anywhere.

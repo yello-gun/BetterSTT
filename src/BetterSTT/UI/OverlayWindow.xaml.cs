@@ -142,7 +142,9 @@ public partial class OverlayWindow : Window
         {
             case OutcomeKind.Pasted:
                 int n = outcome.Item?.WordsRemoved ?? 0;
-                ShowResult("Pasted", n switch { 0 => "nothing to clean", 1 => "1 filler word removed", _ => $"{n} filler words removed" }, true);
+                ShowResult("Pasted", outcome.Note ?? (outcome.Item?.WithoutAi != null ? "polished with AI"
+                    : n switch { 0 => "nothing to clean", 1 => "1 filler word removed", _ => $"{n} filler words removed" }), true);
+                if (outcome.Note != null) showFor = TimeSpan.FromSeconds(3);
                 break;
             case OutcomeKind.PastedLast:
                 ShowResult("Pasted last dictation", "", true);
@@ -186,12 +188,14 @@ public partial class OverlayWindow : Window
         SetIndicator(recording: true);
         foreach (var bar in _bars) bar.Height = 4;
         Wave.Visibility = Visibility.Visible;
-        TitleText.Text = "Listening";
+        // A rewrite listens for an instruction, stopped with the rewrite shortcut.
+        TitleText.Text = _c.RewriteMode ? (_c.RewriteSource != null ? "Say how to change it" : "Say what to write") : "Listening";
         DetailText.Text = "0:00";
         DetailText.Visibility = Visibility.Visible;
         Keys.Children.Clear();
-        foreach (var part in _c.Settings.Hotkey.Parts()) Keys.Children.Add(Keycap(part));
-        StopText.Text = _c.Settings.Activation switch { ActivationMode.Hold => "release to stop", ActivationMode.HandsFree => "to finish", _ => "to stop" };
+        foreach (var part in (_c.RewriteMode ? _c.Settings.RewriteHotkey : _c.Settings.Hotkey).Parts()) Keys.Children.Add(Keycap(part));
+        StopText.Text = _c.RewriteMode ? "when done"
+            : _c.Settings.Activation switch { ActivationMode.Hold => "release to stop", ActivationMode.HandsFree => "to finish", _ => "to stop" };
         StopHint.Visibility = Visibility.Visible;
         _clock.Start();
         ShowAtBottom();
@@ -205,7 +209,7 @@ public partial class OverlayWindow : Window
         ApplyPalette();
         SetIndicator(spinner: true);
         Wave.Visibility = Visibility.Collapsed;
-        TitleText.Text = "Transcribing…";
+        TitleText.Text = _c.BusyText;
         DetailText.Visibility = Visibility.Collapsed;
         StopHint.Visibility = Visibility.Collapsed;
         ShowAtBottom();
