@@ -49,7 +49,7 @@ Every rule can be switched off, and every word list can be edited on the Style p
 | Notes the model adds | "[BLANK_AUDIO]" and "(music)" are removed |
 | Vague endings (Formal style) | "we could grab lunch or something" becomes "we could grab lunch" |
 
-Corrections are worked out from context. A phrase like "no wait" or "scratch that" only signals that you might be correcting yourself, and BetterSTT compares what you said before and after it to decide what to replace. A day replaces a day, a number replaces a number, a repeated word marks where you restarted, and a new clause replaces the old one. When nothing lines up, as in "I'll be late, sorry, traffic is bad," the words are left alone.
+Corrections are worked out from context. A phrase like "no wait" or "scratch that" only signals that you might be correcting yourself, and BetterSTT compares what you said before and after it to decide what to replace. A day replaces a day, a number replaces a number, a repeated word marks where you restarted, and a new clause replaces the old one. A correction still works when you make it a few sentences later. In "Let's meet on Tuesday at the cafe. I'll bring the slides. No wait, Wednesday," it's Tuesday that changes, and the sentences in between stay as they were. When nothing lines up, as in "I'll be late, sorry, traffic is bad," the words are left alone.
 
 BetterSTT uses rules to clean your text and does not use an AI model to rewrite it. It removes what matches a rule and leaves the rest of your wording alone, which means it can't fix a sentence that doesn't make sense.
 

@@ -130,15 +130,37 @@ public static class SelfCorrections
 
         // "…MLA? Scratch that. The syllabus says APA." A strong cue said as its own sentence takes back the
         // whole previous sentence; mid-sentence ("Tuesday, scratch that, Wednesday") it's lined up like the others.
-        var result = strength == Strength.Strong && afterFullStop ? [.. fix] : Align(scope, fix, strength);
+        List<string>? result;
+        if (strength == Strength.Strong && afterFullStop)
+        {
+            result = [.. fix];
+        }
+        else
+        {
+            // First the sentence the correction is in, then anything said earlier, however long ago: in
+            // "Meet on Tuesday at the café. I'll bring the slides. No wait, Wednesday." it's Tuesday that changes.
+            result = Align(scope, fix, strength, lineUpOnly: true);
+            if (result == null && FixEarlier(prefix, fix, strength) is { } fixedPrefix)
+            {
+                // That earlier sentence is corrected; this one stays as it was, minus the correction.
+                string kept = string.Join(' ', scope) + (afterFullStop ? trimmedBefore[^1].ToString() : "");
+                if (continuation.Length > 0 && !afterFullStop) kept += " " + continuation;
+                return Join(fixedPrefix, Capitalize(kept), afterFullStop ? tail.TrimStart('.', '!', '?') : tail);
+            }
+            result ??= Align(scope, fix, strength, lineUpOnly: false);
+        }
         if (result == null) return null;
         if (continuation.Length > 0) result.Add(continuation);
         string sentence = Capitalize(string.Join(' ', result));
         return Join(prefix, sentence, tail);
     }
 
-    /// <summary>Works out which part of <paramref name="scope"/> the fix replaces; null if nothing lines up.</summary>
-    static List<string>? Align(string[] scope, string[] fix, Strength strength)
+    /// <summary>
+    /// Works out which part of <paramref name="scope"/> the fix replaces; null if nothing lines up.
+    /// With <paramref name="lineUpOnly"/>, only a repeated word or a word of the same kind counts (the weaker
+    /// guesses, a restarted clause or the last few words, come after looking at earlier sentences).
+    /// </summary>
+    static List<string>? Align(string[] scope, string[] fix, Strength strength, bool lineUpOnly = false)
     {
         // 1. The fix repeats an earlier word and carries on from there: "the table, no wait, the shelf".
         // After a weak cue a repeated little word ("the") is too common to prove anything.
@@ -168,7 +190,7 @@ public static class SelfCorrections
             }
         }
 
-        if (strength == Strength.Weak) return null;
+        if (strength == Strength.Weak || lineUpOnly) return null;
 
         // 3. A restarted clause: "I think we should, no wait, let's just cancel".
         if (ClauseStarters.Contains(first))
@@ -201,6 +223,43 @@ public static class SelfCorrections
 
         // A strong cue ("scratch that") with nothing that lines up replaces the whole sentence.
         return strength == Strength.Strong ? [.. fix] : null;
+    }
+
+    /// <summary>
+    /// Looks back through the sentences before this one, nearest first, for a word of the same kind as the fix
+    /// (a day, number, time, color or name) and replaces it there. Returns the corrected earlier text, or null.
+    /// </summary>
+    static string? FixEarlier(string earlier, string[] fix, Strength strength)
+    {
+        // Only a clear correction cue and a short fix ("no wait, Wednesday"), so ordinary speech isn't rewritten.
+        if (strength == Strength.Weak || fix.Length > 4 || earlier.Trim().Length == 0) return null;
+        int k = Array.FindIndex(fix, w => !Stopwords.Contains(Norm(w)));
+        if (k < 0) return null;
+        var kind = KindOf(fix[k], isFirstInSentence: false);
+        if (kind == Kind.None) return null;
+
+        var starts = new List<int> { 0 };
+        foreach (Match end in SentenceEnd.Matches(earlier)) starts.Add(end.Index + 1);
+        for (int sIndex = starts.Count - 1; sIndex >= 0; sIndex--)
+        {
+            int start = starts[sIndex], stop = sIndex + 1 < starts.Count ? starts[sIndex + 1] : earlier.Length;
+            string[] tokens = earlier[start..stop].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            for (int i = tokens.Length - 1; i >= 0; i--)
+            {
+                if (KindOf(tokens[i], isFirstInSentence: i == 0) != kind) continue;
+                // Replace as many words as the fix lines up with: "3 pm" → "4 pm", or just "Tuesday" → "Wednesday".
+                int span = 1;
+                while (i + span < tokens.Length && k + span < fix.Length
+                       && (Norm(tokens[i + span]) == Norm(fix[k + span])
+                           || KindOf(fix[k + span], false) is var nextKind && nextKind != Kind.None && KindOf(tokens[i + span], false) == nextKind))
+                    span++;
+                string punctuation = Regex.Match(tokens[i + span - 1], @"[,.;:!?]+$").Value;
+                string replacement = string.Join(' ', fix[k..]) + punctuation;
+                var rebuilt = tokens[..i].Append(replacement).Concat(tokens[(i + span)..]);
+                return (earlier[..start] + " " + string.Join(' ', rebuilt) + " " + earlier[stop..]).Trim();
+            }
+        }
+        return null;
     }
 
     static Kind KindOf(string word, bool isFirstInSentence)

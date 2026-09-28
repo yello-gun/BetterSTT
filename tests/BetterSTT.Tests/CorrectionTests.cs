@@ -30,6 +30,12 @@ public class CorrectionTests
     [InlineData("Do you want APA or MLA? Scratch that. The syllabus says APA.", "The syllabus says APA.")]
     [InlineData("We should meet Tuesday, scratch that, Wednesday.", "We should meet Wednesday.")]
     [InlineData("First point is done. The second one is late, scratch that.", "First point is done.")]
+    // A late correction still reaches back to what it corrects, however long ago it was said.
+    [InlineData("Let's meet on Tuesday at the cafe. I'll bring the slides. No wait, Wednesday.", "Let's meet on Wednesday at the cafe. I'll bring the slides.")]
+    [InlineData("The call is at 3 pm. I'll send the agenda tonight and book the room, no wait, 4 pm.", "The call is at 4 pm. I'll send the agenda tonight and book the room.")]
+    [InlineData("Send the draft to John. Then we can print it. Also add the charts. Sorry, I mean Sarah.", "Send the draft to Sarah. Then we can print it. Also add the charts.")]
+    [InlineData("We need three copies. The binding should be blue. The cover should be white, no wait, black.", "We need three copies. The binding should be blue. The cover should be black.")]
+    [InlineData("Book it for Friday morning. I'll bring snacks, no wait, Saturday morning.", "Book it for Saturday morning. I'll bring snacks.")]
     // Fillers around the correction are ignored.
     [InlineData("Um, it's on Tuesday, uh, no wait, um, Wednesday.", "It's on Wednesday.")]
     public void Corrections_are_worked_out_from_context(string spoken, string expected) =>
@@ -43,6 +49,7 @@ public class CorrectionTests
     [InlineData("It's fine. Actually, I think it works.")]
     [InlineData("Hold on, wait, the door is open.")]
     [InlineData("I read the book, sorry, the traffic was bad.")]
+    [InlineData("We met on Monday. I was tired, sorry, Tuesday was long.")]
     public void Ordinary_speech_is_left_alone(string spoken) =>
         // The correction step changes nothing (other rules, like dropping "Actually,", still apply).
         Assert.Equal(TextCleaner.Clean(spoken, new CleanupOptions { FixCorrections = false }), Clean(spoken));
