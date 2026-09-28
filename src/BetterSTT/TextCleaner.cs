@@ -77,6 +77,7 @@ public static class TextCleaner
 
         string s = Clean(raw, cleanup);
         if (style.RemoveVagueEndings) s = RemoveVagueEndings(s, style.VagueEndings);
+        if (style.IsConcise) s = Wordiness.Tighten(s, style.EmptyWords);
         s = ApplyReplacements(s, replacements);
         s = SpokenMath.Convert(s, style.SpokenMath);
         if (style.SpokenCode) s = SpokenCode.Convert(s);
@@ -191,51 +192,7 @@ public static class TextCleaner
     /// topic ("Also…", "Next…"), after a greeting, before a sign-off, and after the style's maximum
     /// number of sentences. Single-sentence text is left as it is.
     /// </summary>
-    public static string FormatParagraphs(string text, WritingStyle style)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return text;
-        var sentences = SentenceBreak.Split(text.Trim()).Where(s => s.Length > 0).ToList();
-
-        var paragraphs = new List<List<string>>();
-        var current = new List<string>();
-        void Break()
-        {
-            if (current.Count > 0) paragraphs.Add(current);
-            current = new List<string>();
-        }
-
-        // "Hi John, I wanted to ask…" → "Hi John," on its own line, then the rest.
-        if (style.GreetingAndSignOffLines && sentences.Count > 0 && Greeting.Match(sentences[0]) is { Success: true } g)
-        {
-            string rest = g.Groups["rest"].Value.Trim();
-            current.Add(g.Groups["g"].Value.Trim());
-            Break();
-            if (rest.Length > 0) sentences[0] = char.ToUpperInvariant(rest[0]) + rest[1..];
-            else sentences.RemoveAt(0);
-        }
-
-        var starters = style.ParagraphStarters
-            .Select(s => s.Trim())
-            .Where(s => s.Length > 0)
-            .ToList();
-        int max = Math.Max(1, style.MaxSentencesPerParagraph);
-
-        for (int i = 0; i < sentences.Count; i++)
-        {
-            string sentence = sentences[i];
-            bool last = i == sentences.Count - 1;
-            bool signOff = style.GreetingAndSignOffLines && last && sentences.Count > 1 && sentence.Length <= 60 && SignOff.IsMatch(sentence);
-            bool topicChange = starters.Any(st =>
-                sentence.StartsWith(st, StringComparison.OrdinalIgnoreCase)
-                && (sentence.Length == st.Length || !char.IsLetterOrDigit(sentence[st.Length])));
-
-            if (current.Count > 0 && (signOff || topicChange || current.Count >= max)) Break();
-            current.Add(sentence);
-        }
-        Break();
-
-        return string.Join("\n\n", paragraphs.Select(p => string.Join(" ", p)));
-    }
+    public static string FormatParagraphs(string text, WritingStyle style) => Paragraphs.Format(text, style);
 
     /// <summary>
     /// Replaces whole words or phrases, case-insensitively. All fixes run in a single pass, so one

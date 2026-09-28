@@ -131,6 +131,9 @@ public partial class StylePage : Page
                 AutoParagraphs = source.AutoParagraphs,
                 MaxSentencesPerParagraph = source.MaxSentencesPerParagraph,
                 GreetingAndSignOffLines = source.GreetingAndSignOffLines,
+                ParagraphEagerness = source.ParagraphEagerness,
+                Concise = source.IsConcise,
+                EmptyWords = source.EmptyWords.ToList(),
                 ParagraphStarters = source.ParagraphStarters.ToList(),
                 SpokenMath = source.SpokenMath,
                 SpokenLayout = source.SpokenLayout,
@@ -206,21 +209,25 @@ public partial class StylePage : Page
             style.RemoveVagueEndings, on => EditStyle(s => s.RemoveVagueEndings = on),
             WordChips("Endings", vague)));
 
+        // Wordiness
+        Func<AppSettings, List<string>> emptyWords = s => s.StyleNamed(styleName).EmptyWords;
+        Editor.Children.Add(Option("Cut wordiness",
+            "Removes words that don't add to the point: “due to the fact that” → “because”, “in order to” → “to”, “make a decision” → “decide”, “each and every” → “every”, openers like “I just wanted to let you know that”, and empty intensifiers. Nothing that changes the meaning, like “not really”, is touched.",
+            style.IsConcise, on => EditStyle(s => s.Concise = on),
+            WordChips("Empty words", emptyWords)));
+
         // Paragraphs
         var paragraphDetails = new StackPanel();
-        var maxRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 8) };
-        var maxLabel = Theme.Text("Start a new paragraph after at most", 13, Theme.TextSecondary);
-        maxLabel.VerticalAlignment = VerticalAlignment.Center;
-        var maxBox = new ComboBox { ItemsSource = new[] { 2, 3, 4, 5, 6, 8 }, SelectedItem = style.MaxSentencesPerParagraph, Margin = new Thickness(8, 0, 8, 0), MinWidth = 70 };
-        if (maxBox.SelectedIndex < 0) maxBox.SelectedItem = 4;
-        System.Windows.Automation.AutomationProperties.SetName(maxBox, "Sentences per paragraph");
-        maxBox.SelectionChanged += (_, _) => { if (maxBox.SelectedItem is int n) EditStyle(s => s.MaxSentencesPerParagraph = n); };
-        var sentences = Theme.Text("sentences", 13, Theme.TextSecondary);
-        sentences.VerticalAlignment = VerticalAlignment.Center;
-        maxRow.Children.Add(maxLabel);
-        maxRow.Children.Add(maxBox);
-        maxRow.Children.Add(sentences);
-        paragraphDetails.Children.Add(maxRow);
+        var eagerRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 8) };
+        var eagerLabel = Theme.Text("Start new paragraphs", 13, Theme.TextSecondary);
+        eagerLabel.VerticalAlignment = VerticalAlignment.Center;
+        string[] eagerOptions = ["Only at clear shifts", "At most point shifts", "At every point shift"];
+        var eagerBox = new ComboBox { ItemsSource = eagerOptions, SelectedIndex = (int)style.ParagraphEagerness, Margin = new Thickness(8, 0, 0, 0), MinWidth = 200 };
+        System.Windows.Automation.AutomationProperties.SetName(eagerBox, "How readily to start new paragraphs");
+        eagerBox.SelectionChanged += (_, _) => { if (eagerBox.SelectedIndex >= 0) EditStyle(s => s.ParagraphEagerness = (ParagraphEagerness)eagerBox.SelectedIndex); };
+        eagerRow.Children.Add(eagerLabel);
+        eagerRow.Children.Add(eagerBox);
+        paragraphDetails.Children.Add(eagerRow);
 
         var greetings = new ToggleSwitch
         {
@@ -231,10 +238,10 @@ public partial class StylePage : Page
         greetings.Checked += (_, _) => EditStyle(s => s.GreetingAndSignOffLines = true);
         greetings.Unchecked += (_, _) => EditStyle(s => s.GreetingAndSignOffLines = false);
         paragraphDetails.Children.Add(greetings);
-        paragraphDetails.Children.Add(WordChips("New paragraph at", starters));
+        paragraphDetails.Children.Add(WordChips("Always a new paragraph at", starters));
 
         Editor.Children.Add(Option("Automatic paragraphs",
-            "Starts a new paragraph, with a blank line before it, when you change topic (“Also…”, “Next…”), after a greeting, before a sign-off, and when a paragraph gets long.",
+            "Starts a new paragraph where your point shifts, the way writers do: a new idea (“Also…”, or when you start talking about something else), a contrast (“However…”), a jump in time or place (“Yesterday…”, “Next week…”), turning to a request (“Can you…”), and the greeting, wrap-up and sign-off. Sentences that point back (“It…”, “This…”, “So…”) stay together, and a long paragraph gets a break where it's least connected.",
             style.AutoParagraphs, on => EditStyle(s => s.AutoParagraphs = on), paragraphDetails));
 
         // Spoken commands

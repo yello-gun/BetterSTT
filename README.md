@@ -1,4 +1,4 @@
-﻿# BetterSTT
+# BetterSTT
 
 BetterSTT is a speech-to-text app for Windows that works in every app on your PC. It removes filler words like "um," "uh" and "like" before your text is typed, so what you send is shorter and cleaner. I made it to save tokens when I dictate into AI chats, and it's just as useful for email, documents and messages.
 
@@ -48,6 +48,7 @@ Every rule can be switched off, and every word list can be edited on the Style p
 | Mid-sentence corrections | "Let's meet Tuesday, no wait, Wednesday" becomes "Let's meet Wednesday," and "Buy milk. Scratch that. Buy eggs." becomes "Buy eggs." |
 | Notes the model adds | "[BLANK_AUDIO]" and "(music)" are removed |
 | Vague endings (Formal style) | "we could grab lunch or something" becomes "we could grab lunch" |
+| Wordiness (Formal style) | "I just wanted to let you know that the report is done" becomes "The report is done," and "in order to make a decision in the near future" becomes "to decide soon" |
 
 Corrections are worked out from context. A phrase like "no wait" or "scratch that" only signals that you might be correcting yourself, and BetterSTT compares what you said before and after it to decide what to replace. A day replaces a day, a number replaces a number, a repeated word marks where you restarted, and a new clause replaces the old one. A correction still works when you make it a few sentences later. In "Let's meet on Tuesday at the cafe. I'll bring the slides. No wait, Wednesday," it's Tuesday that changes, and the sentences in between stay as they were. The same goes for a repeated word or lead-in, so "Put the book on the table. Then we can eat. No wait, on the shelf." becomes "Put the book on the shelf. Then we can eat." When AI polish is on, the AI also applies any correction the rules couldn't line up. When nothing lines up, as in "I'll be late, sorry, traffic is bad," the words are left alone.
 
@@ -61,7 +62,11 @@ A writing style decides how much BetterSTT changes what you said. You can switch
 
 - Exact words types what you said with no changes at all.
 - Natural removes fillers, pauses and stutters and keeps the rest of your wording.
-- Formal does everything Natural does, drops vague endings like "or something," and splits longer text into paragraphs. A new paragraph starts when you change topic ("Also," "Next," "Finally"), after a greeting like "Hi Sarah," before a sign-off like "Thanks," and when a paragraph gets long.
+- Formal does everything Natural does, cuts wordiness and vague endings like "or something," and splits text into paragraphs where your point shifts.
+
+Formal's paragraphs follow the reasons writing guides give for starting one, rather than a sentence count. A new paragraph starts at a new idea, either announced ("Also," "Another thing") or noticed when the words you use change, which is how a new point shows up in text. It also starts at a contrast ("However," "On the other hand"), a jump in time or place ("Yesterday," "Next week"), a turn from telling to asking ("Can you," "Would it be possible"), and at the greeting, wrap-up and sign-off. Sentences that point back to the one before ("It," "This," "So," "Because") stay with it, and a long paragraph gets a break where its sentences are least connected. You can choose how readily it starts new paragraphs.
+
+Cutting wordiness follows plain-language guides. It swaps stock phrases for the plain word ("due to the fact that" becomes "because"), removes doubled words ("each and every" becomes "every"), turns buried verbs back into verbs ("make a decision" becomes "decide"), drops openers that only announce the message ("I just wanted to let you know that"), and removes empty intensifiers like "really" and "basically." Anything that changes the meaning, like "not really" or "thank you very much," is left alone.
 - Math writes spoken math as symbols, so "x squared plus one over two" becomes x² + 1/2. It can write LaTeX instead.
 - Code is for code editors and terminals. "Camel case user name" becomes userName, with pascal, snake, kebab and constant case too, and "dot," "underscore," "slash," "equals" and brackets become symbols. It only converts what you say and never adds code of its own.
 

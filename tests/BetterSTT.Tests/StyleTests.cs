@@ -49,11 +49,12 @@ public class ParagraphTests
     }
 
     [Fact]
-    public void Long_runs_are_split_after_the_maximum_sentences()
+    public void No_paragraph_break_just_because_of_sentence_count()
     {
-        var style = WritingStyle.Formal();
-        style.MaxSentencesPerParagraph = 2;
-        Assert.Equal("One. Two.\n\nThree. Four.\n\nFive.", TextCleaner.FormatParagraphs("One. Two. Three. Four. Five.", style));
+        // Five sentences on one point stay together.
+        const string text = "The report is done. The report covers the budget. The budget report has three parts. " +
+                            "Each part of the report has a chart. The charts in the report use last year's budget.";
+        Assert.Equal(text, TextCleaner.FormatParagraphs(text, Formal));
     }
 
     [Fact]

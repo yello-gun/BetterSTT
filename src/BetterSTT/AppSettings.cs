@@ -77,7 +77,21 @@ public sealed class WritingStyle
 
     /// <summary>Splits text into paragraphs separated by a blank line.</summary>
     public bool AutoParagraphs { get; set; }
+    /// <summary>Before 3.0 paragraphs broke after this many sentences; they now break where the point shifts. Unused.</summary>
     public int MaxSentencesPerParagraph { get; set; } = 4;
+    /// <summary>How readily a new paragraph starts at a point shift.</summary>
+    public ParagraphEagerness ParagraphEagerness { get; set; } = ParagraphEagerness.Balanced;
+
+    /// <summary>
+    /// Removes wordiness ("due to the fact that" → "because", "I just wanted to let you know that …", "really").
+    /// Null means the style's default: on for Formal, off for the others.
+    /// </summary>
+    public bool? Concise { get; set; }
+    /// <summary>Intensifiers dropped by <see cref="Concise"/> when they add nothing.</summary>
+    public List<string> EmptyWords { get; set; } = Wordiness.DefaultEmptyWords();
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsConcise => Concise ?? (BuiltIn && Name == FormalName);
     /// <summary>"Hi John," and "Thanks," each on their own line.</summary>
     public bool GreetingAndSignOffLines { get; set; } = true;
     /// <summary>A sentence starting with one of these (a change of topic) begins a new paragraph.</summary>
@@ -127,7 +141,7 @@ public sealed class WritingStyle
     public static WritingStyle Formal() => new()
     {
         Name = FormalName, BuiltIn = true, RemoveVagueEndings = true, AutoParagraphs = true,
-        Description = "Also drops vague endings like “or something” and splits text into paragraphs.",
+        Description = "Also cuts wordiness and vague endings like “or something”, and starts a new paragraph where the point shifts.",
     };
 
     public static WritingStyle MathStyle() => new()
