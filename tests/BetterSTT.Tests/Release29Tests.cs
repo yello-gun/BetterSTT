@@ -64,6 +64,21 @@ public class LocalAiTests
         Assert.Equal(["gemma3:27b", "qwen3:8b"], LocalAi.ParseModels(
             """{"models":[{"name":"gemma3:27b","size":17396936941},{"name":"qwen3:8b","size":5225388164}]}""").Select(m => m.Name));
 
+    [Theory]
+    [InlineData("gemma3:4b", true)]
+    [InlineData("llama3.3", true)]
+    [InlineData("hf.co/user/model:Q4_K_M", true)]
+    [InlineData("deepseek-r1:14b", true)]
+    [InlineData("model; del *", false)]
+    [InlineData("", false)]
+    [InlineData("model name with spaces", false)]
+    public void Any_ollama_model_name_can_be_typed(string name, bool valid) =>
+        Assert.Equal(valid, LocalAi.IsValidModelName(name));
+
+    [Fact]
+    public void Models_for_bigger_pcs_are_offered() =>
+        Assert.Contains(LocalAi.Recommended, m => m.Name == "llama3.3:70b");
+
     [Fact]
     public void Snippets_are_never_sent_to_the_ai()
     {

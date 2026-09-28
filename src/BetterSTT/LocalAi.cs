@@ -21,10 +21,16 @@ public static class LocalAi
 
     public static readonly AiModelOption[] Recommended =
     [
+        // Smallest to largest. Sizes are Ollama's download sizes; a model runs fastest when it fits in graphics memory
+        // next to speech recognition (about 2 GB).
         new("gemma3:4b", "Gemma 3 4B", "3.3 GB", "Fastest", "Quick edits alongside speech recognition on most GPUs."),
+        new("llama3.1:8b", "Llama 3.1 8B", "4.9 GB", "Fast", "Meta's all-rounder; good on GPUs with 8 GB or more."),
         new("qwen3:8b", "Qwen3 8B", "5.2 GB", "Fast", "Better writing, still quick on a 12–16 GB GPU."),
         new("gemma3:12b", "Gemma 3 12B", "8.1 GB", "Medium", "Stronger rewrites; best with 16 GB of graphics memory."),
-        new("gemma3:27b", "Gemma 3 27B", "17 GB", "Slow", "Best quality, but larger than most GPUs, so it runs partly on the processor."),
+        new("qwen3:14b", "Qwen3 14B", "9.3 GB", "Medium", "Strong writing for GPUs with 16 GB or more."),
+        new("gemma3:27b", "Gemma 3 27B", "17 GB", "Slow on 16 GB", "High quality; needs a 24 GB GPU to be quick."),
+        new("qwen3:32b", "Qwen3 32B", "20 GB", "Slow on 16 GB", "Very strong; for GPUs with 24 GB or more."),
+        new("llama3.3:70b", "Llama 3.3 70B", "43 GB", "Needs a big GPU", "Best quality; for workstations with 48 GB or more."),
     ];
 
     public const string DefaultInstructions =
@@ -109,6 +115,10 @@ public static class LocalAi
             }
         return models;
     }
+
+    /// <summary>True for a name Ollama could have, like "gemma3:4b", "llama3.3" or "user/model:tag".</summary>
+    public static bool IsValidModelName(string name) =>
+        Regex.IsMatch(name.Trim(), @"^[a-z0-9][a-z0-9._\-/]*(?::[a-z0-9._\-]+)?$", RegexOptions.IgnoreCase) && name.Length <= 100;
 
     /// <summary>Downloads a model through Ollama. Progress is 0..1.</summary>
     public static async Task PullAsync(string model, IProgress<double>? progress, CancellationToken ct)

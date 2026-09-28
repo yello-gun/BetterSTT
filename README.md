@@ -1,4 +1,4 @@
-# BetterSTT
+﻿# BetterSTT
 
 BetterSTT is a speech-to-text app for Windows that works in every app on your PC. It removes filler words like "um," "uh" and "like" before your text is typed, so what you send is shorter and cleaner. I made it to save tokens when I dictate into AI chats, and it's just as useful for email, documents and messages.
 
@@ -69,7 +69,7 @@ Every style except Exact words also understands "new line" and "new paragraph" w
 
 ## Optional local AI
 
-BetterSTT can use an AI model running on your own PC through [Ollama](https://ollama.com). It's off by default and turned on from the AI page, where you also pick the model. Any model you have in Ollama can be used, and the AI page offers recommended ones to download, from Gemma 3 4B (fastest) to Gemma 3 27B (best quality, but slow on most GPUs).
+BetterSTT can use an AI model running on your own PC through [Ollama](https://ollama.com). It's off by default and turned on from the AI page, where you also pick the model. Any model you have in Ollama can be used. The AI page offers recommended ones to download, from Gemma 3 4B (fastest, about a second per edit on a 16 GB GPU) up to Llama 3.3 70B for workstations, and any other model in the [Ollama library](https://ollama.com/library) can be downloaded by name.
 
 - AI polish is a switch on each writing style, with your own instructions for it, such as "make it clear and direct, keep my wording where it works." The rules still clean every dictation first, and the AI edits the result. This is what fixes sentences that don't make sense, which the rules can't do.
 - Rewrite with AI works on text you've already written. Select it in any app, press Ctrl + Alt + R, say how to change it ("make it more formal," "shorten it," "translate it to Spanish") and press the shortcut again. With nothing selected, say what to write.

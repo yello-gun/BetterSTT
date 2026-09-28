@@ -24,7 +24,7 @@ static class Screenshots
             [
                 ("home", typeof(HomePage)), ("style", typeof(StylePage)),
                 ("dictionary", typeof(DictionaryPage)), ("apps", typeof(AppsPage)),
-                ("speech", typeof(SpeechPage)), ("general", typeof(GeneralPage)),
+                ("ai", typeof(AiPage)), ("speech", typeof(SpeechPage)), ("general", typeof(GeneralPage)),
             ];
 
             foreach (bool dark in new[] { false, true })

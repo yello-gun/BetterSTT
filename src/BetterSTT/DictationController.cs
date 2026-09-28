@@ -619,11 +619,8 @@ public sealed class DictationController : IDisposable
         var timer = Stopwatch.StartNew();
         try
         {
-            if (!await LocalAi.IsRunningAsync())
-            {
-                _ = LocalAi.StartAsync(); // ready for next time
-                return (clean, null, "AI wasn't running, so the rules cleaned it");
-            }
+            // No separate "is it running?" check first: a busy Ollama (loading a model) answers that slowly,
+            // which isn't the same as not running. A refused connection below is.
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Clamp(settings.AiTimeoutSeconds, 2, 120)));
             string reply = LocalAi.Tidy(await LocalAi.ChatAsync(settings.AiModel,
                 LocalAi.PolishSystemPrompt(style.AiInstructions), LocalAi.Wrap(clean), cts.Token));
@@ -639,6 +636,12 @@ public sealed class DictationController : IDisposable
         {
             Log.Write($"AI polish took longer than {settings.AiTimeoutSeconds} s; used the rule-cleaned text");
             return (clean, null, "AI took too long, so the rules cleaned it");
+        }
+        catch (HttpRequestException ex) when (ex.HttpRequestError == HttpRequestError.ConnectionError)
+        {
+            Log.Write("AI polish: Ollama isn't running; used the rule-cleaned text and started it for next time");
+            _ = LocalAi.StartAsync();
+            return (clean, null, "AI wasn't running, so the rules cleaned it");
         }
         catch (Exception ex)
         {

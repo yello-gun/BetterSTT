@@ -1,4 +1,4 @@
-<Page
+﻿<Page
     x:Class="BetterSTT.UI.AiPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -46,6 +46,22 @@
             <TextBlock Style="{StaticResource SectionTitle}" Text="Model" />
             <TextBlock Margin="0,-4,0,8" Style="{StaticResource Caption}" Text="Smaller models answer faster; larger ones write better. Speech recognition also uses about 2 GB of graphics memory, so pick a model that fits next to it." />
             <StackPanel x:Name="Models" />
+            <Border Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource Body}" Text="Any other Ollama model" />
+                        <TextBlock x:Name="OtherHint" Margin="0,2,16,0" Style="{StaticResource Caption}" Text="Type a name from the Ollama library, e.g. mistral-small3.2 or deepseek-r1:14b." />
+                    </StackPanel>
+                    <ui:TextBox x:Name="OtherBox" Grid.Column="1" Width="220" AutomationProperties.Name="Other model name" PlaceholderText="model:tag" />
+                    <ui:Button Grid.Column="2" Margin="8,0,0,0" Click="OnDownloadOther" Content="Download" Icon="{ui:SymbolIcon ArrowDownload24}" />
+                </Grid>
+            </Border>
+            <ui:HyperlinkButton Margin="0,2,0,0" Content="Browse the Ollama library" NavigateUri="https://ollama.com/library" />
 
             <TextBlock Style="{StaticResource SectionTitle}" Text="Timing" />
             <Border Style="{StaticResource Card}">

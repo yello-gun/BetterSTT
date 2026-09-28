@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Shapes;
@@ -176,6 +176,24 @@ public partial class AiPage : Page
             _downloading.Remove(name);
             await RefreshAsync();
         }
+    }
+
+    void OnDownloadOther(object sender, RoutedEventArgs e)
+    {
+        string name = OtherBox.Text.Trim();
+        if (!LocalAi.IsValidModelName(name))
+        {
+            OtherHint.Text = "That doesn't look like an Ollama model name. Names look like gemma3:4b or llama3.3.";
+            return;
+        }
+        if (!_running)
+        {
+            OtherHint.Text = "Start Ollama first (above).";
+            return;
+        }
+        OtherHint.Text = $"Downloading {name}… it appears in the list above when it's ready.";
+        OtherBox.Text = "";
+        _ = DownloadAsync(name);
     }
 
     async void OnTry(object sender, RoutedEventArgs e)
