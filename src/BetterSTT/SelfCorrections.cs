@@ -163,9 +163,23 @@ public static class SelfCorrections
     static List<string>? Align(string[] scope, string[] fix, Strength strength, bool lineUpOnly = false)
     {
         // 1. The fix repeats an earlier word and carries on from there: "the table, no wait, the shelf".
-        // After a weak cue a repeated little word ("the") is too common to prove anything.
         string first = Norm(fix[0]);
-        if (strength != Strength.Weak || !Stopwords.Contains(first))
+        int anchor = Array.FindIndex(fix, w => !Stopwords.Contains(Norm(w)));
+        if (anchor > 0)
+        {
+            // "the report goes to Ana": the real word ("report") shows where the restart is, not "the".
+            string word = Norm(fix[anchor]);
+            for (int i = scope.Length - 1; i >= 0; i--)
+            {
+                if (Norm(scope[i]) != word) continue;
+                int start = i;
+                while (start > 0 && i - start < anchor && Norm(scope[start - 1]) == Norm(fix[anchor - (i - start) - 1])) start--;
+                return [.. scope[..start], .. fix[(anchor - (i - start))..]];
+            }
+        }
+        // A repeated little word ("the", "to") is weaker evidence: it waits until earlier sentences have been
+        // checked for something better, and after a weak cue it doesn't count at all.
+        if (!Stopwords.Contains(first) || !lineUpOnly && strength != Strength.Weak)
         {
             for (int i = scope.Length - 1; i >= 0; i--)
                 if (Norm(scope[i]) == first) return [.. scope[..i], .. fix];
@@ -226,40 +240,90 @@ public static class SelfCorrections
     }
 
     /// <summary>
-    /// Looks back through the sentences before this one, nearest first, for a word of the same kind as the fix
-    /// (a day, number, time, color or name) and replaces it there. Returns the corrected earlier text, or null.
+    /// Looks back through the sentences before this one, nearest first, for what the fix corrects and replaces
+    /// it there. Returns the corrected earlier text, or null. Three things count, in this order:
+    /// a word of the same kind ("Tuesday" → "Wednesday", "3 pm" → "4 pm", "John" → "Sarah"),
+    /// the fix's first real word said earlier ("report goes to Sam … no wait, report goes to Ana"),
+    /// and the same little lead-in word ("on the table … no wait, the shelf", "to marketing … no wait, to sales").
     /// </summary>
     static string? FixEarlier(string earlier, string[] fix, Strength strength)
     {
-        // Only a clear correction cue and a short fix ("no wait, Wednesday"), so ordinary speech isn't rewritten.
-        if (strength == Strength.Weak || fix.Length > 4 || earlier.Trim().Length == 0) return null;
+        // Only a clear correction cue, so ordinary speech isn't rewritten.
+        if (strength == Strength.Weak || fix.Length > 8 || earlier.Trim().Length == 0) return null;
         int k = Array.FindIndex(fix, w => !Stopwords.Contains(Norm(w)));
         if (k < 0) return null;
-        var kind = KindOf(fix[k], isFirstInSentence: false);
-        if (kind == Kind.None) return null;
 
-        var starts = new List<int> { 0 };
-        foreach (Match end in SentenceEnd.Matches(earlier)) starts.Add(end.Index + 1);
-        for (int sIndex = starts.Count - 1; sIndex >= 0; sIndex--)
+        var sentences = new List<(int Start, int Stop)>();
+        int from = 0;
+        foreach (Match end in SentenceEnd.Matches(earlier))
         {
-            int start = starts[sIndex], stop = sIndex + 1 < starts.Count ? starts[sIndex + 1] : earlier.Length;
+            sentences.Add((from, end.Index + 1));
+            from = end.Index + 1;
+        }
+        if (earlier[from..].Trim().Length > 0) sentences.Add((from, earlier.Length));
+
+        return FindAndReplace(earlier, sentences, fix, k, SameKind, wholeFix: false)
+               ?? FindAndReplace(earlier, sentences, fix, k, SameWord, wholeFix: false)
+               ?? (k > 0 ? FindAndReplace(earlier, sentences, fix, k, SameLeadIn, wholeFix: true) : null);
+    }
+
+    delegate (int At, int Span)? Matcher(string[] tokens, int i, string[] fix, int k);
+
+    /// <param name="wholeFix">True when the match starts at the fix's lead-in word, so the fix replaces it all.</param>
+    static string? FindAndReplace(string earlier, List<(int Start, int Stop)> sentences, string[] fix, int k, Matcher match, bool wholeFix)
+    {
+        for (int s = sentences.Count - 1; s >= 0; s--)
+        {
+            var (start, stop) = sentences[s];
             string[] tokens = earlier[start..stop].Split(' ', StringSplitOptions.RemoveEmptyEntries);
             for (int i = tokens.Length - 1; i >= 0; i--)
             {
-                if (KindOf(tokens[i], isFirstInSentence: i == 0) != kind) continue;
-                // Replace as many words as the fix lines up with: "3 pm" → "4 pm", or just "Tuesday" → "Wednesday".
-                int span = 1;
-                while (i + span < tokens.Length && k + span < fix.Length
-                       && (Norm(tokens[i + span]) == Norm(fix[k + span])
-                           || KindOf(fix[k + span], false) is var nextKind && nextKind != Kind.None && KindOf(tokens[i + span], false) == nextKind))
-                    span++;
-                string punctuation = Regex.Match(tokens[i + span - 1], @"[,.;:!?]+$").Value;
-                string replacement = string.Join(' ', fix[k..]) + punctuation;
-                var rebuilt = tokens[..i].Append(replacement).Concat(tokens[(i + span)..]);
+                if (match(tokens, i, fix, k) is not { } hit) continue;
+                int last = hit.At + hit.Span - 1;
+                string punctuation = Regex.Match(tokens[last], @"[,.;:!?]+$").Value;
+                string replacement = string.Join(' ', wholeFix ? fix : fix[k..]) + punctuation;
+                var rebuilt = tokens[..hit.At].Append(replacement).Concat(tokens[(last + 1)..]);
                 return (earlier[..start] + " " + string.Join(' ', rebuilt) + " " + earlier[stop..]).Trim();
             }
         }
         return null;
+    }
+
+    /// <summary>A word of the same kind; replaces as many words as line up ("3 pm" → "4 pm").</summary>
+    static (int, int)? SameKind(string[] tokens, int i, string[] fix, int k)
+    {
+        var kind = KindOf(fix[k], isFirstInSentence: false);
+        if (kind == Kind.None || KindOf(tokens[i], isFirstInSentence: i == 0) != kind) return null;
+        int span = 1;
+        while (i + span < tokens.Length && k + span < fix.Length
+               && (Norm(tokens[i + span]) == Norm(fix[k + span])
+                   || KindOf(fix[k + span], false) is var nextKind && nextKind != Kind.None && KindOf(tokens[i + span], false) == nextKind))
+            span++;
+        return (i, span);
+    }
+
+    /// <summary>The fix restarts from a word said earlier: replaces from there to the end of that sentence.</summary>
+    static (int, int)? SameWord(string[] tokens, int i, string[] fix, int k) =>
+        Norm(tokens[i]) == Norm(fix[k]) ? (i, tokens.Length - i) : null;
+
+    /// <summary>
+    /// "the shelf" after "on the table": the same lead-in word ("the", "to", "on"…) followed by a real word;
+    /// replaces the lead-in and as many following words as the fix has.
+    /// </summary>
+    static (int, int)? SameLeadIn(string[] tokens, int i, string[] fix, int k)
+    {
+        // At least the first lead-in word must match: "to marketing" is corrected by "to the sales team".
+        int m = 0;
+        while (m < k && i + m < tokens.Length && Norm(tokens[i + m]) == Norm(fix[m])) m++;
+        if (m == 0 || i + m >= tokens.Length || Stopwords.Contains(Norm(tokens[i + m]))) return null;
+        int content = fix.Length - k, span = m;
+        while (content > 0 && i + span < tokens.Length && !Stopwords.Contains(Norm(tokens[i + span])))
+        {
+            span++;
+            content--;
+            if (Regex.IsMatch(tokens[i + span - 1], @"[,.;:!?]$")) break; // don't run past the end of a phrase
+        }
+        return (i, span);
     }
 
     static Kind KindOf(string word, bool isFirstInSentence)

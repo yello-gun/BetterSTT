@@ -36,6 +36,12 @@ public class CorrectionTests
     [InlineData("Send the draft to John. Then we can print it. Also add the charts. Sorry, I mean Sarah.", "Send the draft to Sarah. Then we can print it. Also add the charts.")]
     [InlineData("We need three copies. The binding should be blue. The cover should be white, no wait, black.", "We need three copies. The binding should be blue. The cover should be black.")]
     [InlineData("Book it for Friday morning. I'll bring snacks, no wait, Saturday morning.", "Book it for Saturday morning. I'll bring snacks.")]
+    // Any repeated word or lead-in reaches back too, not only days, numbers, colors and names.
+    [InlineData("Put the book on the table. Then we can eat. No wait, on the shelf.", "Put the book on the shelf. Then we can eat.")]
+    [InlineData("Send the report to marketing. I'll email everyone after lunch. Sorry, I mean to the sales team.", "Send the report to the sales team. I'll email everyone after lunch.")]
+    [InlineData("The report goes to Sam's team. Also check the numbers. No wait, the report goes to Ana's team first.", "The report goes to Ana's team first. Also check the numbers.")]
+    // Longer fixes (up to eight words) are fine.
+    [InlineData("We'll meet at the downtown office. I'll bring lunch. No wait, at the new office on Main Street.", "We'll meet at the new office on Main Street. I'll bring lunch.")]
     // Fillers around the correction are ignored.
     [InlineData("Um, it's on Tuesday, uh, no wait, um, Wednesday.", "It's on Wednesday.")]
     public void Corrections_are_worked_out_from_context(string spoken, string expected) =>
