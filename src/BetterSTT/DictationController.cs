@@ -625,6 +625,7 @@ public sealed class DictationController : IDisposable
             string reply = LocalAi.Tidy(await LocalAi.ChatAsync(settings.AiModel,
                 LocalAi.PolishSystemPrompt(style.AiInstructions), LocalAi.Wrap(clean), cts.Token));
             Log.Write($"AI polish: {timer.Elapsed.TotalSeconds:F1} s with {settings.AiModel}");
+            reply = TextCleaner.Recheck(reply, settings.Cleanup); // the AI's text gets the same final check
             if (LocalAi.CheckPolish(clean, reply) is { } problem)
             {
                 Log.Write($"AI edit not used: {problem}");

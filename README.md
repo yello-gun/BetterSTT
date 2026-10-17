@@ -52,7 +52,7 @@ Every rule can be switched off, and every word list can be edited on the Style p
 
 Corrections are worked out from context. A phrase like "no wait" or "scratch that" only signals that you might be correcting yourself, and BetterSTT compares what you said before and after it to decide what to replace. A day replaces a day, a number replaces a number, a repeated word marks where you restarted, and a new clause replaces the old one. A correction still works when you make it a few sentences later. In "Let's meet on Tuesday at the cafe. I'll bring the slides. No wait, Wednesday," it's Tuesday that changes, and the sentences in between stay as they were. The same goes for a repeated word or lead-in, so "Put the book on the table. Then we can eat. No wait, on the shelf." becomes "Put the book on the shelf. Then we can eat." When AI polish is on, the AI also applies any correction the rules couldn't line up. When nothing lines up, as in "I'll be late, sorry, traffic is bad," the words are left alone.
 
-BetterSTT uses rules to clean your text and does not use an AI model to rewrite it. It removes what matches a rule and leaves the rest of your wording alone, which means it can't fix a sentence that doesn't make sense.
+After cleaning, BetterSTT rechecks the result for anything still flagged, such as a filler, a repeated word, a sentence said twice ("And three. And three.") or a restart ("I've only defeated, I've only finished"), and cleans it again until nothing is left. BetterSTT uses rules to clean your text and does not use an AI model to rewrite it. It removes what matches a rule and leaves the rest of your wording alone, which means it can't fix a sentence that doesn't make sense.
 
 ![Style page](docs/screenshots/style-light.png)
 

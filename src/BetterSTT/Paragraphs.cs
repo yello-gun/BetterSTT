@@ -53,7 +53,19 @@ public static class Paragraphs
     // Words that point back to the previous sentence (cohesion by reference and conjunction).
     static readonly Regex PointsBack = new(
         @"^(?:it|its|it's|this|that|these|those|they|them|their|he|she|his|her|which|so|because|and|but|or|then|plus|otherwise|" +
-        @"for\s+example|for\s+instance|in\s+fact|as\s+a\s+result|that's\s+why|which\s+means|even\s+then)\b", Opts);
+        @"for\s+example|for\s+instance|in\s+fact|as\s+a\s+result|that's\s+why|which\s+means|even\s+then|" +
+        // Expanding on the point just made: "Especially if…", "As well as…", "Maybe even…", "Such as…".
+        @"especially|as\s+well\s+as|such\s+as|maybe\s+even|even|not\s+to\s+mention|including|in\s+particular|particularly|" +
+        @"specifically|mainly|on\s+top\s+of\s+that|along\s+with|or\s+just|or\s+maybe|like\s+(?:if|when))\b", Opts);
+
+    // The next item of a list that has already started ("one … Two, have the acid rain…", "First … Second…").
+    static readonly Regex ListItem = new(
+        @"^(?:(?:and|so|then)\s+)?(?:number\s+)?(?:two|three|four|five|six|second(?:ly)?|third(?:ly)?|fourth|fifth|next|finally|lastly)\b", Opts);
+    // Announcing a list of points is itself a new point: "And if there were a couple things that would help…".
+    static readonly Regex IntroducesList = new(
+        @"\b(?:a\s+(?:couple|few)\s+(?:of\s+)?|(?:two|three|four|several)\s+(?:main\s+|big\s+|other\s+)?)(?:things|ideas|reasons|suggestions|points|issues|problems|changes|questions|options|ways)\b", Opts);
+    static readonly Regex ListStart = new(
+        @"\b(?:first(?:ly|\s+of\s+all)?|number\s+one)\b|(?:^|[:,]\s*|\b(?:be|are|is|were)\s+)one\b", Opts);
 
     static readonly HashSet<string> Stop = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -117,6 +129,7 @@ public static class Paragraphs
             int wordCount = TextCleaner.CountWords(string.Join(" ", paragraphs[p]));
             if (!(paragraphs[p].Count >= 5 && wordCount > 100 || paragraphs[p].Count >= 4 && wordCount > 150)) continue;
             int cut = WeakestLink(paragraphs[p]);
+            if (cut < 0) continue; // every sentence carries on from the one before: no natural place for a pause
             paragraphs.Insert(p + 1, paragraphs[p].Skip(cut).ToList());
             paragraphs[p] = paragraphs[p].Take(cut).ToList();
             p--; // the first half may still be long
@@ -136,6 +149,13 @@ public static class Paragraphs
         bool starter = style.ParagraphStarters.Any(st => st.Trim().Length > 0
             && s.StartsWith(st.Trim(), StringComparison.OrdinalIgnoreCase)
             && (s.Length == st.Trim().Length || !char.IsLetterOrDigit(s[st.Trim().Length])));
+        // The next item of a list started in this paragraph continues it, unless the paragraph is already long.
+        bool listGoesOn = ListItem.IsMatch(s)
+            && Enumerable.Range(paragraphStart, i - paragraphStart).Any(j => ListStart.IsMatch(sentences[j]))
+            && TextCleaner.CountWords(string.Join(" ", sentences.Skip(paragraphStart).Take(i - paragraphStart))) <= 100;
+        if (listGoesOn) return -1;
+        // Announcing a list starts a new point, even after "And".
+        if (IntroducesList.IsMatch(s)) return 3;
         if (starter || Contrast.IsMatch(s) || WrapUp.IsMatch(s)) score += 3;
         else if (TimeOrPlace.IsMatch(s)) score += 2;
 
@@ -148,7 +168,7 @@ public static class Paragraphs
         // carry on in the next one (a new point beginning, not a stray aside).
         var before = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (int j = Math.Max(paragraphStart, i - 2); j < i; j++) before.UnionWith(words[j]);
-        if (words[i].Count >= 2 && before.Count >= 2)
+        if (words[i].Count >= 3 && before.Count >= 2)
         {
             int shared = words[i].Count(before.Contains);
             if (shared == 0)
@@ -164,8 +184,10 @@ public static class Paragraphs
             }
         }
 
-        // Words that point back keep the sentence with the one before it.
-        if (PointsBack.IsMatch(s) && !Contrast.IsMatch(s)) score -= 1.5;
+        // Words that point back keep the sentence with the one before it. "But" with nothing in common with what came
+        // before is a pivot to a new point ("But the boss fight felt rewarding"), so it doesn't hold the sentence back.
+        bool pivot = Regex.IsMatch(s, @"^but\b", Opts) && words[i].Count >= 4 && !words[i].Overlaps(before);
+        if (PointsBack.IsMatch(s) && !Contrast.IsMatch(s) && !pivot) score -= 1.5;
         // Avoid one-sentence paragraphs unless the signal is strong.
         if (i - paragraphStart == 1 && score < 3) score -= 1;
         return score;
@@ -186,10 +208,12 @@ public static class Paragraphs
     static int WeakestLink(List<string> sentences)
     {
         var words = sentences.Select(ContentWords).ToList();
-        int best = sentences.Count / 2;
+        int best = -1;
         double lowest = double.MaxValue;
         for (int i = 2; i <= sentences.Count - 2; i++) // both halves keep at least two sentences
         {
+            // Never between a sentence and one that carries it on ("So…", "Because…", "Especially…") or the next list item.
+            if (PointsBack.IsMatch(sentences[i]) || ListItem.IsMatch(sentences[i])) continue;
             var left = new HashSet<string>(words[i - 1], StringComparer.OrdinalIgnoreCase);
             left.UnionWith(words[i - 2]);
             var right = new HashSet<string>(words[i], StringComparer.OrdinalIgnoreCase);
@@ -197,6 +221,7 @@ public static class Paragraphs
             double similarity = left.Count == 0 || right.Count == 0 ? 0
                 : left.Count(right.Contains) / Math.Sqrt(left.Count * (double)right.Count);
             if (PointsBack.IsMatch(sentences[i])) similarity += 0.5;
+            if (ListItem.IsMatch(sentences[i])) similarity += 1; // never split a list between its items
             if (TimeOrPlace.IsMatch(sentences[i]) || Contrast.IsMatch(sentences[i]) || WrapUp.IsMatch(sentences[i])) similarity -= 0.3;
             if (similarity < lowest)
             {

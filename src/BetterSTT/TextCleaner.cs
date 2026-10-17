@@ -28,6 +28,20 @@ public static class TextCleaner
     // without a following space is left alone, so real words like "re-read" are safe.
     static readonly Regex CutOffWord = new(
         @"(?<![\p{L}'’])(?<f>\p{L}+)(?:-\s+|\s*(?:—|–|--)\s*)(?=(?<n>\p{L}+))", Opts);
+    // A restart that changes a word: "I've only defeated I've only finished the tornado" keeps the second try.
+    // Only after a subject-like opener and without a comma, so "she likes cats, she likes dogs" stays.
+    static readonly Regex RestartPhrase = new(
+        @"(?<![\p{L}'’])(?<p>(?:i|i've|i'm|i'd|i'll|we|we've|we're|we'll|you|you've|you're|he|she|they|they've|they're|it|it's|there|there's|this|that|maybe|so|and|but|if|when)(?:\s+\p{L}+(?:['’]\p{L}+)?){1,3})\s+(?<a>\p{L}+(?:['’]\p{L}+)?)\s+(?=\k<p>\s+\p{L})",
+        Opts);
+    // A refined second try: "an easier, a slightly easier" → "a slightly easier".
+    static readonly Regex Refinement = new(
+        @"(?<![\p{L}'’])(?:a|an|the|my|your|our|his|her|this|that)\s+(?<w>\p{L}+),?\s+(?<second>(?:a|an|the|my|your|our|his|her|this|that)\s+\p{L}+(?:\s+\p{L}+)?\s+\k<w>)(?![\p{L}'’])",
+        Opts);
+    // A sentence that is only a list number ("Two." "And three.") belongs to the item that follows it.
+    static readonly Regex ListMarker = new(
+        @"^(?:(?:and|so|then|okay)\s+)?(?:number\s+)?(?:one|two|three|four|five|six|seven|eight|nine|ten|first|second|third|fourth|fifth|[1-9])[.!?]$",
+        Opts);
+
     static readonly Regex SentenceBreak = new(@"(?<=[.!?][""”’)]?)\s+(?=[\p{Lu}\p{N}""“(])");
     static readonly Regex Greeting = new(
         @"^(?<g>(?:hi|hello|hey|dear|greetings|good\s+(?:morning|afternoon|evening))\b[^,.!?]{0,40}[,!])\s*(?<rest>.*)$", Opts);
@@ -57,7 +71,119 @@ public static class TextCleaner
 
         if (o.RemoveEllipses) s = ResolvePauses(s);
         if (o.RemoveStutters) s = RemoveStutters(s, o.StutterExceptions);
-        return Tidy(s);
+        s = Tidy(s);
+        if (o.RemoveStutters) s = JoinListMarkers(JoinFragments(DropRepeatedSentences(s)));
+        return s;
+    }
+
+    /// <summary>
+    /// What's still flagged in cleaned text: filler sounds, pause marks, repeated words or phrases, restarts, and
+    /// a sentence said twice in a row. Empty when the text is clean. Used to recheck the result of each pass.
+    /// </summary>
+    public static List<string> RemainingIssues(string text, CleanupOptions o)
+    {
+        var issues = new List<string>();
+        if (string.IsNullOrWhiteSpace(text) || !o.Enabled) return issues;
+        if (o.RemoveFillerSounds && BuildWordRegex(o.FillerSounds, elongate: true) is { } fillers)
+            issues.AddRange(fillers.Matches(text).Select(m => $"filler: {m.Value.Trim(' ', ',', '.')}"));
+        if (o.RemoveEllipses && Ellipsis.IsMatch(text)) issues.Add("pause mark");
+        if (o.RemoveStutters)
+        {
+            var keep = new HashSet<string>(o.StutterExceptions.Select(e => e.Trim()), StringComparer.OrdinalIgnoreCase);
+            issues.AddRange(Stutter.Matches(text).Where(m => !keep.Contains(m.Groups["w"].Value)).Select(m => $"repeated word: {m.Value}"));
+            issues.AddRange(PhraseStutter.Matches(text).Select(m => $"repeated phrase: {m.Value}"));
+            issues.AddRange(RestartPhrase.Matches(text).Select(m => $"restart: {m.Value.Trim()}"));
+            issues.AddRange(Refinement.Matches(text).Select(m => $"restart: {m.Value}"));
+            if (DropRepeatedSentences(text) != text) issues.Add("sentence said twice");
+        }
+        return issues;
+    }
+
+    /// <summary>
+    /// Rechecks finished text and cleans it again, up to three times, until nothing is flagged. Paragraph and line
+    /// breaks are kept: each block is checked on its own, and a sentence repeated across a break is dropped too.
+    /// </summary>
+    public static string Recheck(string text, CleanupOptions o)
+    {
+        if (string.IsNullOrWhiteSpace(text) || !o.Enabled) return text;
+        var parts = Regex.Split(text, @"(\n+)");
+        for (int i = 0; i < parts.Length; i += 2)
+        {
+            string block = parts[i];
+            for (int pass = 0; pass < 3 && RemainingIssues(block, o).Count > 0; pass++)
+            {
+                string again = Clean(block, o);
+                if (again == block) break;
+                block = again;
+            }
+            parts[i] = block;
+        }
+        // "…And three.\n\nAnd three." across a break: the repeat goes.
+        for (int i = 2; i < parts.Length; i += 2)
+        {
+            string last = LastSentence(parts[i - 2]);
+            string first = SentenceBreak.Split(parts[i].Trim()).FirstOrDefault() ?? "";
+            if (last.Length > 0 && SameSentence(last, first)) parts[i] = parts[i].Trim()[first.Length..].TrimStart();
+        }
+        return Regex.Replace(string.Concat(parts), @"\n{3,}", "\n\n").Trim();
+    }
+
+    static string LastSentence(string block) => SentenceBreak.Split(block.Trim()).LastOrDefault() ?? "";
+
+    static string SentenceKey(string sentence) =>
+        Regex.Replace(Regex.Replace(sentence.ToLowerInvariant(), @"[^\p{L}\p{N}' ]+", " "), @"^\s*(?:and|so|but|or|then|okay)\s+", "").Trim();
+
+    static bool SameSentence(string a, string b) => SentenceKey(a).Length > 0 && SentenceKey(a) == SentenceKey(b);
+
+    /// <summary>"And three. And three." → "And three." A sentence said twice in a row (a period hid the repeat).</summary>
+    static string DropRepeatedSentences(string s)
+    {
+        var sentences = SentenceBreak.Split(s).ToList();
+        for (int i = sentences.Count - 1; i > 0; i--)
+            if (SameSentence(sentences[i], sentences[i - 1])) sentences.RemoveAt(i);
+        return string.Join(" ", sentences);
+    }
+
+    /// <summary>"Two. Have the acid rain…" → "Two, have the acid rain…": a list number joins its item.</summary>
+    static string JoinListMarkers(string s)
+    {
+        var sentences = SentenceBreak.Split(s).ToList();
+        for (int i = sentences.Count - 2; i >= 0; i--)
+        {
+            if (!ListMarker.IsMatch(sentences[i].Trim())) continue;
+            // Only inside a list that has started ("one…", "first…"); a lone "Two." can be an answer.
+            if (!Regex.IsMatch(string.Join(" ", sentences.Take(i)), @"\b(?:one|first(?:ly)?|number\s+one)\b", Opts)) continue;
+            sentences[i] = sentences[i].TrimEnd('.', '!', '?') + ", " + LowerFirstUnlessName(sentences[i + 1], s);
+            sentences.RemoveAt(i + 1);
+        }
+        return string.Join(" ", sentences);
+    }
+
+    /// <summary>
+    /// "a slightly easier. Tornado thing." → "a slightly easier tornado thing.": speech recognition put a period
+    /// between a describing word and its noun. Only for a 1–3 word piece after "a/an/the … -er".
+    /// </summary>
+    static string JoinFragments(string s)
+    {
+        var sentences = SentenceBreak.Split(s).ToList();
+        for (int i = sentences.Count - 2; i >= 0; i--)
+        {
+            string next = sentences[i + 1].Trim();
+            int words = next.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+            if (words is < 1 or > 3 || !Regex.IsMatch(sentences[i], @"\b(?:a|an|the)\s+(?:\p{L}+\s+)?\p{L}+er\.$", Opts)) continue;
+            sentences[i] = sentences[i][..^1] + " " + LowerFirstUnlessName(next, s);
+            sentences.RemoveAt(i + 1);
+        }
+        return string.Join(" ", sentences);
+    }
+
+    /// <summary>Lowercases the first letter unless the word is "I" or a name (written capitalized elsewhere mid-sentence).</summary>
+    static string LowerFirstUnlessName(string sentence, string wholeText)
+    {
+        var first = Regex.Match(sentence, @"^\p{L}[\p{L}'’]*");
+        if (!first.Success || first.Value == "I" || first.Value.StartsWith("I'") || first.Value.StartsWith("I’")) return sentence;
+        bool name = Regex.IsMatch(wholeText, $@"(?<=[\p{{L}},;:]\s+){Regex.Escape(first.Value)}\b");
+        return name ? sentence : char.ToLowerInvariant(sentence[0]) + sentence[1..];
     }
 
     /// <summary>
@@ -78,6 +204,8 @@ public static class TextCleaner
         string s = Clean(raw, cleanup);
         if (style.RemoveVagueEndings) s = RemoveVagueEndings(s, style.VagueEndings);
         if (style.IsConcise) s = Wordiness.Tighten(s, style.EmptyWords);
+        // Recheck: anything still flagged (a repeat that only showed up after another fix) gets another pass.
+        if (style.SpokenMath == MathFormat.Off && !style.SpokenCode) s = Recheck(s, cleanup);
         s = ApplyReplacements(s, replacements);
         s = SpokenMath.Convert(s, style.SpokenMath);
         if (style.SpokenCode) s = SpokenCode.Convert(s);
@@ -320,6 +448,9 @@ public static class TextCleaner
             return restarted ? "" : m.Value;
         });
         s = PhraseStutter.Replace(s, m => m.Groups["p"].Value);
+        // The second try keeps the sentence's capital when the first try opened the sentence.
+        s = RestartPhrase.Replace(s, m => char.IsUpper(m.Value[0]) ? Cap.ToString() : "");
+        s = Refinement.Replace(s, m => m.Groups["second"].Value);
         var keep = new HashSet<string>(exceptions.Select(e => e.Trim()), StringComparer.OrdinalIgnoreCase);
         return Stutter.Replace(s, m => keep.Contains(m.Groups["w"].Value) ? m.Value : m.Groups["w"].Value);
     }
