@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -13,7 +13,7 @@ public static class Diagnostics
     public const string Hidden = "(hidden)";
 
     /// <summary>The files a bundle contains, for showing before it's saved.</summary>
-    public static readonly string[] Contents = ["about.txt", "settings.json", "log.txt"];
+    public static readonly string[] Contents = ["about.txt", "settings.json", "log.txt", "crash.txt (only if BetterSTT crashed)"];
 
     public static void Save(string zipPath, DictationController c)
     {
@@ -25,6 +25,9 @@ public static class Diagnostics
         try { if (File.Exists(AppPaths.LogFile)) log = File.ReadAllText(AppPaths.LogFile); }
         catch (IOException) { /* being written; leave it out */ }
         Add(zip, "log.txt", Redact(log));
+        string crash = Path.Combine(AppPaths.Data, "crash.txt");
+        try { if (File.Exists(crash)) Add(zip, "crash.txt", Redact(File.ReadAllText(crash))); }
+        catch (IOException) { /* being written; leave it out */ }
     }
 
     static void Add(ZipArchive zip, string name, string text)
@@ -46,7 +49,9 @@ public static class Diagnostics
             .AppendLine($"Windows: {RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})")
             .AppendLine($".NET: {RuntimeInformation.FrameworkDescription}")
             .AppendLine($"GPU: {SystemInfo.GpuName ?? "unknown"}")
+            .AppendLine($"This PC: {EngineCheck.SystemSummary()}")
             .AppendLine($"Speech runtime: {c.RuntimeName} (GPU {(s.UseGpu ? "on" : "off")})")
+            .AppendLine("Speech engine checks: " + (s.EngineChecks.Count == 0 ? "none yet" : string.Join("; ", s.EngineChecks.Select(r => $"{r.Key.Split('|')[0]} {(r.Ok ? "ok" : "failed: " + r.Detail)}"))))
             .AppendLine($"Model: {model?.Name ?? $"{s.ModelType} {s.ModelQuantization}"} ({(Transcriber.IsDownloaded(s) ? "downloaded" : "not downloaded")}), state {c.ModelState}{(c.ModelError != null ? $": {c.ModelError}" : "")}")
             .AppendLine($"Last dictation: {c.LastAudioSeconds:F1} s of audio in {c.LastTranscribeSeconds:F2} s")
             .AppendLine($"Memory in use: {Environment.WorkingSet >> 20} MB")

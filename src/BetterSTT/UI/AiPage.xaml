@@ -78,6 +78,20 @@
                 </Grid>
             </Border>
 
+            <Border Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource Body}" Text="Keep my exact words" />
+                        <TextBlock Margin="0,2,16,0" Style="{StaticResource Caption}" Text="On: AI polish may fix grammar and cut words, but not replace one of your words with another. If it does (say, “steel sword” becomes “rusty sword”), that edit is dropped and the rule-cleaned text is typed instead. Off: the AI may reword." />
+                    </StackPanel>
+                    <ui:ToggleSwitch x:Name="KeepWordingSwitch" Grid.Column="1" VerticalAlignment="Center" AutomationProperties.Name="Keep my exact words" />
+                </Grid>
+            </Border>
+
             <TextBlock Style="{StaticResource SectionTitle}" Text="Where AI is used" />
             <Border Style="{StaticResource Card}">
                 <Grid>

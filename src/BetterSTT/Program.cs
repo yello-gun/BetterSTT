@@ -9,9 +9,19 @@ static class Program
     [STAThread]
     static void Main(string[] args)
     {
-        if (args is ["--transcribe", var wav, var outFile])
+        // The speech engine checks itself in a separate process, so a crash in its native code can't take the app down.
+        if (args is ["--probe-engine", var mode, var resultFile])
         {
-            TranscribeFile(wav, outFile);
+            Environment.Exit(EngineCheck.RunProbe(mode == "gpu", resultFile));
+            return;
+        }
+
+        // --cpu: never use the graphics card (a fix if the speech engine crashes on it). It stays off until turned on under Speech.
+        bool forceCpu = args.Contains("--cpu");
+        string[] plain = args.Where(a => a != "--cpu").ToArray();
+        if (plain is ["--transcribe", var wav, var outFile])
+        {
+            TranscribeFile(wav, outFile, forceCpu);
             return;
         }
 
@@ -30,7 +40,7 @@ static class Program
         // --toggle, --paste-last, --cancel: control the running copy from a launcher, Stream Deck or script.
         string? command = args.Select(a => a.TrimStart('-').ToLowerInvariant()).FirstOrDefault(Signals.Commands.Contains);
 
-        using var mutex = new Mutex(true, @"Local\BetterSTT.SingleInstance", out bool firstInstance);
+        using var mutex = new Mutex(true, @"Local\BetterSTT.SingleInstance" + AppPaths.InstanceSuffix, out bool firstInstance);
         if (!firstInstance && screenshotDir == null)
         {
             // Already running: pass the command on, or ask that instance to open its window.
@@ -39,12 +49,20 @@ static class Program
         }
         using var signals = new Signals(named: screenshotDir == null);
 
-        AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Write($"Fatal: {e.ExceptionObject}");
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => ReportFatal(e.ExceptionObject);
+        TaskScheduler.UnobservedTaskException += (_, e) => Log.Write($"Background error: {e.Exception.GetBaseException()}");
 
         AppPaths.MigrateFromOldNames();
 
         // Screenshots use default settings and sample history so nothing personal ends up in them.
         var settings = screenshotDir == null ? AppSettings.Load() : AppSettings.Sample();
+
+        if (forceCpu && settings.UseGpu)
+        {
+            settings.UseGpu = false;
+            try { settings.Save(); } catch { /* the setting still applies to this run */ }
+        }
+        if (screenshotDir == null) Log.Write($"BetterSTT {Updater.Current.ToString(3)} starting · {EngineCheck.SystemSummary()}");
 
         // A downloaded update installs when the app is opened. The installer reopens BetterSTT afterwards.
         if (screenshotDir == null && !testRun && command == null && settings.CheckForUpdates
@@ -62,10 +80,41 @@ static class Program
     }
 
     /// <summary>Must run before the first WhisperFactory is created. Falls back to CPU if Vulkan is unavailable.</summary>
-    static void UseRuntime(AppSettings settings) =>
-        RuntimeOptions.RuntimeLibraryOrder = settings.UseGpu
-            ? [RuntimeLibrary.Vulkan, RuntimeLibrary.Cpu]
-            : [RuntimeLibrary.Cpu];
+    internal static void UseRuntime(AppSettings settings)
+    {
+        try
+        {
+            RuntimeOptions.RuntimeLibraryOrder = settings.UseGpu
+                ? [RuntimeLibrary.Vulkan, RuntimeLibrary.Cpu]
+                : [RuntimeLibrary.Cpu];
+        }
+        catch (Exception ex)
+        {
+            // Not fatal: the engine check reports the same problem in plain words when the model loads.
+            Log.Write($"Could not choose the speech runtime: {ex.Message}");
+        }
+    }
+
+    /// <summary>A crash in managed code: keep the details and say so, instead of vanishing.</summary>
+    static void ReportFatal(object error)
+    {
+        try
+        {
+            Log.Write($"Fatal: {error}");
+            string file = Path.Combine(AppPaths.Data, "crash.txt");
+            Directory.CreateDirectory(AppPaths.Data);
+            File.WriteAllText(file, $"BetterSTT {Updater.Current.ToString(3)} · {DateTime.Now:u}\n{EngineCheck.SystemSummary()}\n\n{error}");
+            if (Environment.GetEnvironmentVariable("BETTERSTT_QUIET") != "1")
+                System.Windows.Forms.MessageBox.Show(
+                    "BetterSTT hit an unexpected error and has to close.\n\nThe details were saved to:\n" + file
+                    + "\n\nIf it keeps happening, start BetterSTT.exe with the --cpu option, and send that file to whoever is helping you.",
+                    "BetterSTT", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error);
+        }
+        catch
+        {
+            // Nothing more can be done.
+        }
+    }
 
     public static void Restart()
     {
@@ -76,9 +125,10 @@ static class Program
     }
 
     /// <summary>Diagnostics: BetterSTT.exe --transcribe input.wav result.txt (16 kHz mono 16-bit WAV).</summary>
-    static void TranscribeFile(string wav, string outFile)
+    static void TranscribeFile(string wav, string outFile, bool forceCpu)
     {
         var settings = AppSettings.Load();
+        if (forceCpu) settings.UseGpu = false;
         UseRuntime(settings);
         try
         {
@@ -115,7 +165,8 @@ public sealed class Signals : IDisposable
     static readonly string[] All = [Show, .. Commands];
 
     // "ShowWindow" is the name versions before 2.6 listen on.
-    static string EventName(string signal) => signal == Show ? @"Local\BetterSTT.ShowWindow" : $@"Local\BetterSTT.{signal}";
+    static string EventName(string signal) =>
+        (signal == Show ? @"Local\BetterSTT.ShowWindow" : $@"Local\BetterSTT.{signal}") + AppPaths.InstanceSuffix;
 
     readonly EventWaitHandle[] _handles;
 

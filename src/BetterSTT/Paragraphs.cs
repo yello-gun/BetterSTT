@@ -245,11 +245,29 @@ public static class Paragraphs
         return set;
     }
 
+    /// <summary>The same meaningful words as <see cref="ContentWords"/>, in the order they were said (repeats kept).</summary>
+    public static List<string> ContentSequence(string sentence)
+    {
+        var list = new List<string>();
+        sentence = Regex.Replace(sentence, @"(?<=\d),(?=\d{3}(?!\d))", ""); // 12,000 is one number, not 12 and 000
+        foreach (Match m in Regex.Matches(sentence.ToLowerInvariant().Replace('’', '\''), @"[\p{L}\p{N}']+"))
+        {
+            string w = m.Value.Trim('\'');
+            if (w.Length < 3 || Stop.Contains(w)) continue;
+            list.Add(Stem(w));
+        }
+        return list;
+    }
+
     static string Stem(string w)
     {
         foreach (string suffix in new[] { "ing", "ies", "ed", "es", "s" })
             if (w.Length > suffix.Length + 3 && w.EndsWith(suffix, StringComparison.Ordinal))
-                return suffix == "ies" ? w[..^3] + "y" : w[..^suffix.Length];
-        return w;
+            {
+                w = suffix == "ies" ? w[..^3] + "y" : w[..^suffix.Length];
+                break;
+            }
+        // "image" and "images" meet at "imag"; "make" and "makes" at "mak".
+        return w.Length > 4 && w.EndsWith('e') ? w[..^1] : w;
     }
 }

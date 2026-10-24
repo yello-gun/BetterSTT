@@ -14,6 +14,8 @@ public partial class AiPage : Page
     readonly DictationController _c = App.Controller;
     bool _building;
     IReadOnlyList<LocalAi.InstalledModel> _installed = [];
+    /// <summary>Installed models that think before they answer (reasoning models).</summary>
+    readonly HashSet<string> _thinkers = new(StringComparer.OrdinalIgnoreCase);
     bool _running;
     readonly Dictionary<string, double> _downloading = new(StringComparer.OrdinalIgnoreCase);
 
@@ -32,6 +34,8 @@ public partial class AiPage : Page
         {
             if (!_building && TimeoutBox.SelectedIndex >= 0) _c.Update(s => s.AiTimeoutSeconds = TimeoutOptions[TimeoutBox.SelectedIndex]);
         };
+        KeepWordingSwitch.Checked += (_, _) => { if (!_building) _c.Update(s => s.AiKeepWording = true); };
+        KeepWordingSwitch.Unchecked += (_, _) => { if (!_building) _c.Update(s => s.AiKeepWording = false); };
         AiSwitch.Checked += (_, _) => { if (!_building) _ = TurnOnAsync(); };
         AiSwitch.Unchecked += (_, _) =>
         {
@@ -43,6 +47,7 @@ public partial class AiPage : Page
         {
             _building = true;
             AiSwitch.IsChecked = _c.Settings.AiEnabled;
+            KeepWordingSwitch.IsChecked = _c.Settings.AiKeepWording;
             TimeoutBox.SelectedIndex = Array.IndexOf(TimeoutOptions, TimeoutOptions.MinBy(t => Math.Abs(t - _c.Settings.AiTimeoutSeconds)));
             _building = false;
             Details.Visibility = _c.Settings.AiEnabled ? Visibility.Visible : Visibility.Collapsed;
@@ -72,6 +77,9 @@ public partial class AiPage : Page
         bool installed = LocalAi.FindOllama() != null;
         try { _installed = _running ? await LocalAi.ListModelsAsync() : []; }
         catch { _installed = []; }
+        _thinkers.Clear();
+        foreach (var model in _installed)
+            if (await LocalAi.CanThinkAsync(model.Name)) _thinkers.Add(model.Name);
 
         StatusDot.SetResourceReference(Shape.FillProperty, _running ? Theme.Success : Theme.Caution);
         (StatusText.Text, StatusHint.Text) = (_running, installed) switch
@@ -90,15 +98,49 @@ public partial class AiPage : Page
         Models.Children.Clear();
         var names = new HashSet<string>(_installed.Select(m => m.Name), StringComparer.OrdinalIgnoreCase);
 
+        // The model that was chosen is gone from Ollama (removed, or never downloaded): every edit would quietly fall back.
+        string chosen = _c.Settings.AiModel;
+        bool chosenMissing = _running && chosen.Length > 0 && !_installed.Any(m => Same(m.Name, chosen) || Same(chosen, m.Name));
+        if (chosenMissing)
+            Models.Children.Add(Notice($"Your chosen model, {chosen}, isn't installed in Ollama any more, so AI edits are being skipped. Pick an installed model below, or download it again.",
+                _downloading.ContainsKey(chosen) ? null : ("Download", () => _ = DownloadAsync(chosen))));
+        // A reasoning model thinks for a long time before it answers.
+        else if (_thinkers.Contains(chosen))
+            Models.Children.Add(Notice($"{chosen} is a reasoning model: it thinks before it answers, so one edit can take 10 to 60 seconds, and BetterSTT can't switch that off for it. "
+                                       + "AI polish skips it so dictation stays fast, while Rewrite with AI waits for it. For dictating, a standard model like Gemma 3 or Llama 3.1 is a better fit.", null));
+
         // Installed models first (any of them can be used), then recommended ones to download.
         foreach (var model in _installed)
         {
             var known = LocalAi.Recommended.FirstOrDefault(r => Same(r.Name, model.Name));
             Models.Children.Add(ModelRow(model.Name, known?.Label ?? model.Name,
-                $"{model.Bytes / 1e9:F1} GB{(known != null ? $" · {known.Speed} · {known.Description}" : "")}", installed: true));
+                $"{model.Bytes / 1e9:F1} GB{(known != null ? $" · {known.Speed} · {known.Description}" : "")}"
+                + (_thinkers.Contains(model.Name) ? " · reasoning model, slow for edits" : ""), installed: true));
         }
         foreach (var r in LocalAi.Recommended.Where(r => !names.Any(n => Same(n, r.Name))))
             Models.Children.Add(ModelRow(r.Name, r.Label, $"{r.Size} · {r.Speed} · {r.Description}", installed: false));
+    }
+
+    /// <summary>A highlighted note, optionally with one button.</summary>
+    Border Notice(string text, (string Label, Action Click)? action)
+    {
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var message = Theme.Text(text, 13);
+        message.TextWrapping = TextWrapping.Wrap;
+        message.Margin = new Thickness(0, 0, 16, 0);
+        grid.Children.Add(message);
+        if (action is { } a)
+        {
+            var button = new Button { Content = a.Label, VerticalAlignment = VerticalAlignment.Center };
+            button.Click += (_, _) => a.Click();
+            Grid.SetColumn(button, 1);
+            grid.Children.Add(button);
+        }
+        var card = new Border { Child = grid, Style = (Style)FindResource("Card"), Padding = new Thickness(20, 14, 20, 14), Margin = new Thickness(0, 0, 0, 8) };
+        card.Res(Border.BackgroundProperty, Theme.CautionBackground).Res(Border.BorderBrushProperty, Theme.Caution);
+        return card;
     }
 
     /// <summary>"gemma3:4b" and "gemma3:4b-it-q4_K_M" count as the same model.</summary>
@@ -212,11 +254,21 @@ public partial class AiPage : Page
             await LocalAi.StartAsync();
             string text = TryBox.Text.Trim();
             string cleaned = TextCleaner.Process(text, _c.Settings); // the rules run first, as in a dictation
-            string reply = LocalAi.Tidy(await LocalAi.ChatAsync(_c.Settings.AiModel,
-                LocalAi.PolishSystemPrompt(_c.Settings.CurrentStyle.AiInstructions), LocalAi.Wrap(cleaned), CancellationToken.None));
-            string? problem = LocalAi.CheckPolish(cleaned, reply);
-            TryResult.Text = reply;
-            TryStatus.Text = $"{timer.Elapsed.TotalSeconds:F1} s with {_c.Settings.AiModel}"
+            string model = _c.Settings.AiModel;
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(30, _c.Settings.AiTimeoutSeconds * 3)));
+            var reply = await LocalAi.ChatAsync(model, LocalAi.PolishSystemPrompt(_c.Settings.CurrentStyle.AiInstructions),
+                LocalAi.Wrap(cleaned), cts.Token, think: false, numPredict: LocalAi.PolishBudget(cleaned), temperature: 0);
+            var done = LocalAi.Finish(reply, cleaned);
+            if (done.Text.Length == 0 || reply.Truncated)
+            {
+                TryStatus.Text = $"{timer.Elapsed.TotalSeconds:F1} s · {model} " + (await LocalAi.CanThinkAsync(model)
+                    ? "is a reasoning model and kept thinking instead of answering, so a dictation would skip it. Choose a standard model."
+                    : "didn't give a finished answer.");
+                return;
+            }
+            string? problem = LocalAi.CheckPolish(cleaned, done.Text, _c.Settings.AiKeepWording);
+            TryResult.Text = done.Text;
+            TryStatus.Text = $"{timer.Elapsed.TotalSeconds:F1} s with {model}"
                              + (problem != null ? $" · a dictation wouldn't use this: {problem}" : "");
         }
         catch (Exception ex)

@@ -21,7 +21,7 @@ BetterSTT runs on Windows 10 and Windows 11 (64-bit). It doesn't need administra
 4. BetterSTT opens and downloads its speech model the first time it runs. The recommended model is about 550 MB, so the first start takes a few minutes on a normal connection. The status at the bottom left of the window says "Ready" once it's done.
 5. Click into any text box, press Ctrl + Alt + Space, speak, and press Ctrl + Alt + Space again.
 
-A graphics card makes transcription much faster, but it isn't required. BetterSTT uses the GPU through Vulkan when one is available and falls back to the processor when it isn't.
+BetterSTT includes the Microsoft Visual C++ runtime files that its speech engine needs, so it works on a PC that has never had the "Visual C++ Redistributable" installed. A graphics card makes transcription much faster, but it isn't required. BetterSTT uses the GPU through Vulkan when one is available and falls back to the processor when it isn't.
 
 ### Updating
 
@@ -79,6 +79,8 @@ BetterSTT can use an AI model running on your own PC through [Ollama](https://ol
 - AI polish is a switch on each writing style, with your own instructions for it, such as "make it clear and direct, keep my wording where it works." The rules still clean every dictation first, and the AI edits the result. This is what fixes sentences that don't make sense, which the rules can't do.
 - Rewrite with AI works on text you've already written. Select it in any app, press Ctrl + Alt + R, say how to change it ("make it more formal," "shorten it," "translate it to Spanish") and press the shortcut again. With nothing selected, say what to write.
 
+Some models are reasoning models (Qwen3 and DeepSeek-R1 are examples): they think for a while before they answer, which can take a minute for one edit and can't be switched off for every model. BetterSTT never types that thinking. A model that keeps thinking is skipped for AI polish so dictation stays fast, while Rewrite with AI waits for its finished answer, and the AI page marks these models. "Keep my exact words" is on by default and drops an AI edit that replaces one of your words with another, or copies a detail from one place over another (so "a steel sword" can't turn into "a rusty sword").
+
 The AI never holds up a dictation. If Ollama isn't running, the AI is slower than the time limit you set, or its reply looks like it answered your text instead of editing it or added things you didn't say, BetterSTT types the rule-cleaned text instead. Home keeps the version without AI for every AI edit, with a button to copy it. BetterSTT only talks to Ollama at 127.0.0.1 on your own PC, so the AI features work offline and your text never leaves the computer.
 
 ## Making it fit how you work
@@ -106,6 +108,7 @@ Per-app rules change settings for one app only. Examples are Exact words in a co
 - Each recording is saved to disk while you speak. If the app crashes or transcription fails, the Home page lets you retry it.
 - Home keeps your recent dictations so you can copy them again or fix a word. It keeps the last three by default, and you can choose 5, 10, 15 or all of them.
 - Ctrl + Alt + Shift + V types your last dictation again, which helps when it went into the wrong window.
+- A crash in the speech engine can't take BetterSTT down with it. The first time the engine runs on a PC (and again after a new graphics card, model or version), BetterSTT tries it in a separate process. If the graphics card makes it crash, BetterSTT switches to the processor by itself and tells you; if nothing can run it, a message says why and what to do. A crash while the app itself was loading the engine is noticed on the next start the same way.
 - Windows blocks apps from typing into programs that run as administrator. BetterSTT notices this and puts the text on your clipboard so it isn't lost.
 - A small indicator shows while you speak, with a live draft of your words. You can move it to any corner or edge of the screen and change its size and opacity.
 - When the language is set to detect automatically, each recent dictation shows which language BetterSTT heard.
@@ -122,6 +125,7 @@ Your settings, your recent dictations, a log and your speech models are stored i
 ## Command line
 
 - `--toggle`, `--paste-last` and `--cancel` control the copy of BetterSTT that's already running. They work well with launchers, Stream Deck buttons and scripts. If BetterSTT isn't running, it starts in the tray first.
+- `--cpu` makes BetterSTT use the processor instead of the graphics card, and remembers that. It's the quickest fix if the speech engine crashes on a PC's graphics card. Turn the graphics card back on under Speech.
 - `--background` starts BetterSTT in the tray without opening its window. The Windows startup entry uses it.
 - `--transcribe input.wav result.txt` transcribes a 16 kHz mono WAV file and reports how long it took.
 - `--screenshots <folder>` saves every page in light and dark mode as PNG files, using sample data.

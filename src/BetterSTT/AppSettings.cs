@@ -161,8 +161,20 @@ public sealed class WritingStyle
 
 public static class AppPaths
 {
+    /// <summary>
+    /// Where settings, history, models and the log live. The BETTERSTT_DATA environment variable points a copy of the
+    /// app at another folder (used by tests, so they never touch the real data).
+    /// </summary>
     public static string Data { get; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BetterSTT");
+        Environment.GetEnvironmentVariable("BETTERSTT_DATA") is { Length: > 0 } custom
+            ? custom
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BetterSTT");
+
+    /// <summary>Empty normally; with a custom data folder it keeps that copy's single-instance lock and signals separate.</summary>
+    public static string InstanceSuffix { get; } =
+        Environment.GetEnvironmentVariable("BETTERSTT_DATA") is { Length: > 0 } custom
+            ? "." + Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(custom)))[..8]
+            : "";
     public static string SettingsFile => Path.Combine(Data, "settings.json");
     public static string Models => Path.Combine(Data, "models");
     public static string LogFile => Path.Combine(Data, "log.txt");
@@ -178,6 +190,7 @@ public static class AppPaths
     /// </summary>
     public static void MigrateFromOldNames()
     {
+        if (InstanceSuffix.Length > 0) return; // a test copy with its own data folder must not move the real folders
         string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         foreach (string name in OldNames)
         {
@@ -356,6 +369,11 @@ public sealed class AppSettings
     public bool AiEnabled { get; set; }
     /// <summary>The Ollama model to use, e.g. "gemma3:4b".</summary>
     public string AiModel { get; set; } = "";
+    /// <summary>
+    /// On: AI polish may fix grammar and cut words but not replace one of your words with another (an edit that does is
+    /// dropped and the rule-cleaned text is typed). Off: it may reword.
+    /// </summary>
+    public bool AiKeepWording { get; set; } = true;
     /// <summary>How long to wait for an AI edit before typing the rule-cleaned text instead.</summary>
     public int AiTimeoutSeconds { get; set; } = 10;
     /// <summary>Select text anywhere, press this, and say how to change it.</summary>
@@ -385,6 +403,8 @@ public sealed class AppSettings
     public GgmlType ModelType { get; set; } = GgmlType.LargeV3Turbo;
     public QuantizationType ModelQuantization { get; set; } = QuantizationType.Q5_0;
     public bool UseGpu { get; set; } = true;
+    /// <summary>What happened when the speech engine was tried on this PC (see <see cref="EngineCheck"/>).</summary>
+    public List<EngineResult> EngineChecks { get; set; } = new();
     public string Language { get; set; } = "en";
     /// <summary>Names and jargon, comma-separated, so Whisper spells them right.</summary>
     public string Vocabulary { get; set; } = "";

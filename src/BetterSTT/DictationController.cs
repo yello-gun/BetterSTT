@@ -27,6 +27,9 @@ public enum OutcomeKind
 }
 
 /// <param name="Note">A short remark for the indicator, e.g. why the AI edit wasn't used.</param>
+/// <summary>The speech engine can't run on this PC (not even on the processor). The message says why and what to do.</summary>
+public sealed class EngineUnavailableException(string message) : Exception(message);
+
 public sealed record DictationOutcome(OutcomeKind Kind, RecentDictation? Item = null, string? Error = null, string? Note = null);
 
 public enum HotkeyTarget { Dictate, PasteLast, AddWord, Rewrite }
@@ -321,6 +324,8 @@ public sealed class DictationController : IDisposable
         change(Settings);
 
         Sounds.Enabled = Settings.PlaySounds;
+        // Turning the graphics card back on means "try it again", so an earlier failure is forgotten.
+        if (!before.UseGpu && Settings.UseGpu) EngineCheck.Forget(Settings, gpu: true);
         if (before.StartWithWindows != Settings.StartWithWindows)
         {
             try { StartupRegistration.Apply(Settings.StartWithWindows); }
@@ -338,6 +343,9 @@ public sealed class DictationController : IDisposable
             RegisterHotkeys(announceConflict: true);
         }
         if (before.RecentLimit != Settings.RecentLimit) History.Trim(Settings.RecentLimit);
+        // What was learned about a model (that it keeps thinking) is forgotten when AI is set up again.
+        if (before.AiModel != Settings.AiModel || before.AiEnabled != Settings.AiEnabled || before.AiTimeoutSeconds != Settings.AiTimeoutSeconds)
+            LocalAi.ForgetLearned();
         if (before.ModelType != Settings.ModelType || before.ModelQuantization != Settings.ModelQuantization)
             _modelTask = LoadModelAsync();
 
@@ -376,22 +384,78 @@ public sealed class DictationController : IDisposable
                 await Task.Run(() => Transcriber.EnsureModelAsync(snapshot, progress, CancellationToken.None));
                 SetModelState(ModelState.Loading);
             }
+            snapshot = await EnsureEngineAsync(snapshot);
+            // If the process dies inside the native engine, this marker is how the next start finds out.
+            EngineCheck.MarkLoading(snapshot.UseGpu);
             await Task.Run(() => _transcriber.Load(snapshot));
+            EngineCheck.ClearMarker();
             _lastUsed = DateTime.Now;
+            Log.Write($"Speech model ready ({(snapshot.UseGpu ? "graphics card" : "processor")})");
             SetModelState(ModelState.Ready);
         }
         catch (Exception ex)
         {
+            EngineCheck.ClearMarker(); // a managed error isn't a crash
             Log.Write($"Model load failed: {ex}");
-            ModelError = ex.Message;
+            ModelError = ex is EngineUnavailableException ? ex.Message : $"{ex.Message} Check the Speech page.";
             SetModelState(ModelState.Failed);
-            Notice?.Invoke($"Could not load the speech model: {ex.Message}", true);
+            Notice?.Invoke(ex is EngineUnavailableException ? ex.Message : $"Could not load the speech model: {ex.Message}", true);
             throw;
         }
         finally
         {
             _loadGate.Release();
         }
+    }
+
+    /// <summary>
+    /// Makes sure the speech engine can run here before it's loaded inside the app. The first time (and after a
+    /// new graphics card, model or version) it's tried in a separate process, so a crash in the native engine can't
+    /// close BetterSTT. If the graphics card fails, the processor takes over automatically; if that fails too, the
+    /// reason is explained.
+    /// </summary>
+    async Task<AppSettings> EnsureEngineAsync(AppSettings snapshot)
+    {
+        // The previous run died while loading the engine: that runtime doesn't work here.
+        if (EngineCheck.TakeMarker() is { } died)
+        {
+            bool diedOnGpu = died == "gpu";
+            Log.Write($"The previous run closed while loading the speech engine ({(diedOnGpu ? "graphics card" : "processor")})");
+            Update(s => EngineCheck.Store(s, new EngineResult
+            {
+                Key = EngineCheck.Key(diedOnGpu, snapshot), Ok = false, When = DateTime.Now,
+                Detail = "BetterSTT closed unexpectedly while it was loading",
+            }));
+        }
+
+        if (snapshot.UseGpu)
+        {
+            var result = EngineCheck.Cached(Settings, EngineCheck.Key(true, snapshot)) ?? await CheckEngineAsync(true, snapshot);
+            if (!result.Ok)
+            {
+                Update(s => s.UseGpu = false);
+                snapshot.UseGpu = false;
+                Program.UseRuntime(snapshot); // before the engine is first loaded in this process
+                Notice?.Invoke($"BetterSTT couldn't use your graphics card for speech recognition ({result.Detail}), so it's using the processor instead. "
+                               + "It works the same, but slower: with the large model, speech takes a few seconds to turn into text. "
+                               + "Under Speech, the Small or Base model is much faster on a processor, and you can try the graphics card again there.", true);
+            }
+        }
+
+        if (!snapshot.UseGpu)
+        {
+            var result = EngineCheck.Cached(Settings, EngineCheck.Key(false, snapshot)) ?? await CheckEngineAsync(false, snapshot);
+            if (!result.Ok)
+                throw new EngineUnavailableException($"The speech engine can't run on this PC: {result.Detail}. {EngineCheck.Advice(result.Detail)}");
+        }
+        return snapshot;
+    }
+
+    async Task<EngineResult> CheckEngineAsync(bool gpu, AppSettings snapshot)
+    {
+        var result = await EngineCheck.ProbeAsync(gpu, snapshot);
+        Update(s => EngineCheck.Store(s, result));
+        return result;
     }
 
     /// <summary>Frees the model's memory once it has been idle for the configured time.</summary>
@@ -615,6 +679,11 @@ public sealed class DictationController : IDisposable
         if (!settings.AiEnabled || !style.AiPolish || style.ExactWords || string.IsNullOrWhiteSpace(settings.AiModel))
             return (clean, null, null);
 
+        string model = settings.AiModel;
+        // A model that has already shown it keeps thinking would hold up every dictation for nothing.
+        if (LocalAi.IsSlowThinker(model))
+            return (clean, null, $"{model} thinks before it answers, so AI polish was skipped");
+
         SetBusy("Polishing with AI…");
         var timer = Stopwatch.StartNew();
         try
@@ -622,21 +691,41 @@ public sealed class DictationController : IDisposable
             // No separate "is it running?" check first: a busy Ollama (loading a model) answers that slowly,
             // which isn't the same as not running. A refused connection below is.
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Clamp(settings.AiTimeoutSeconds, 2, 120)));
-            string reply = LocalAi.Tidy(await LocalAi.ChatAsync(settings.AiModel,
-                LocalAi.PolishSystemPrompt(style.AiInstructions), LocalAi.Wrap(clean), cts.Token));
-            Log.Write($"AI polish: {timer.Elapsed.TotalSeconds:F1} s with {settings.AiModel}");
-            reply = TextCleaner.Recheck(reply, settings.Cleanup); // the AI's text gets the same final check
-            if (LocalAi.CheckPolish(clean, reply) is { } problem)
+            var reply = await LocalAi.ChatAsync(model, LocalAi.PolishSystemPrompt(style.AiInstructions), LocalAi.Wrap(clean), cts.Token,
+                think: false, numPredict: LocalAi.PolishBudget(clean), temperature: 0);
+            Log.Write($"AI polish: {timer.Elapsed.TotalSeconds:F1} s with {model}");
+
+            // No answer: the model only reasoned, or was cut off before it finished (a reasoning model that
+            // can't be told to stop thinking ends up here).
+            var done = LocalAi.Finish(reply, clean);
+            if (done.Text.Length == 0 || reply.Truncated)
+            {
+                bool thinker = await LocalAi.CanThinkAsync(model);
+                if (thinker) LocalAi.MarkSlowThinker(model);
+                Log.Write($"AI polish not used: {model} {(done.Reasoned ? "answered with its reasoning" : "was cut off")}");
+                return (clean, null, thinker ? $"{model} thinks before it answers, so AI polish was skipped" : "AI reply was cut off, so the rules cleaned it");
+            }
+
+            string text = TextCleaner.Recheck(done.Text, settings.Cleanup); // the AI's text gets the same final check
+            if (LocalAi.CheckPolish(clean, text, settings.AiKeepWording) is { } problem)
             {
                 Log.Write($"AI edit not used: {problem}");
                 return (clean, null, $"AI edit not used: {problem}");
             }
-            return reply == clean ? (clean, null, null) : (reply, clean, null);
+            return text == clean ? (clean, null, null) : (text, clean, null);
         }
         catch (OperationCanceledException)
         {
-            Log.Write($"AI polish took longer than {settings.AiTimeoutSeconds} s; used the rule-cleaned text");
-            return (clean, null, "AI took too long, so the rules cleaned it");
+            // Out of time. A reasoning model that does this is thinking: stop waiting for it from now on.
+            bool thinker = await LocalAi.CanThinkAsync(model);
+            if (thinker) LocalAi.MarkSlowThinker(model);
+            Log.Write($"AI polish took longer than {settings.AiTimeoutSeconds} s; used the rule-cleaned text{(thinker ? " (reasoning model)" : "")}");
+            return (clean, null, thinker ? $"{model} thinks before it answers, so AI polish was skipped" : "AI took too long, so the rules cleaned it");
+        }
+        catch (LocalAi.ModelMissingException)
+        {
+            Log.Write($"AI polish: {model} isn't installed in Ollama");
+            return (clean, null, $"{model} isn't installed in Ollama. Choose a model on the AI page");
         }
         catch (HttpRequestException ex) when (ex.HttpRequestError == HttpRequestError.ConnectionError)
         {
@@ -689,11 +778,23 @@ public sealed class DictationController : IDisposable
         try
         {
             if (!await LocalAi.StartAsync()) throw new InvalidOperationException("Ollama isn't running and couldn't be started.");
-            // Rewrites can be long, so they get more time than a polish.
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Clamp(settings.AiTimeoutSeconds * 3, 10, 300)));
-            result = LocalAi.Tidy(await LocalAi.ChatAsync(settings.AiModel,
-                LocalAi.RewriteSystemPrompt(instruction, source != null), source != null ? LocalAi.Wrap(source) : instruction, cts.Token));
-            Log.Write($"AI rewrite: {timer.Elapsed.TotalSeconds:F1} s with {settings.AiModel}");
+            string model = settings.AiModel;
+            // A reasoning model needs time to think, and its reasoning is kept apart from the answer. Other models get
+            // more time than a polish because a rewrite can be long.
+            bool thinker = await LocalAi.CanThinkAsync(model);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Clamp(settings.AiTimeoutSeconds * (thinker ? 9 : 3), 10, 600)));
+            var reply = await LocalAi.ChatAsync(model, LocalAi.RewriteSystemPrompt(instruction, source != null),
+                source != null ? LocalAi.Wrap(source) : instruction, cts.Token,
+                think: thinker ? true : null, numPredict: 6000, temperature: 0.4);
+            Log.Write($"AI rewrite: {timer.Elapsed.TotalSeconds:F1} s with {model}{(thinker ? " (reasoning model)" : "")}");
+
+            // Whatever the model wrote while thinking is never typed. If that's all there is, say so.
+            var done = LocalAi.Finish(reply, source);
+            if (done.Text.Length == 0)
+                throw new InvalidOperationException(done.Reasoned
+                    ? $"{model} wrote out its reasoning but no finished text. Choose a different model on the AI page."
+                    : "The AI returned nothing.");
+            result = done.Text;
         }
         catch (Exception ex)
         {
